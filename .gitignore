@@ -1,0 +1,30 @@
+# Rust
+/target
+**/target
+*.pdb
+
+# Node
+node_modules
+dist
+.vite
+
+# Tauri
+src-tauri/gen/schemas
+
+# Playwright
+test-results
+playwright-report
+blob-report
+playwright/.cache
+
+# Snapshots pending review
+**/*.snap.new
+
+# Generated test oracle
+src/test-support/oracle.json
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea
+*.swp

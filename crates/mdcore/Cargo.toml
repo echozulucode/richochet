@@ -1,0 +1,27 @@
+[package]
+name = "mdcore"
+description = "Richochet conversion engine: rich text <-> document AST <-> Markdown."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints.rust]
+missing_docs = "warn"
+
+[dependencies]
+pulldown-cmark.workspace = true
+html5ever.workspace = true
+markup5ever_rcdom.workspace = true
+ammonia.workspace = true
+serde = { workspace = true, optional = true }
+thiserror.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+proptest.workspace = true
+similar-asserts.workspace = true
+
+[features]
+default = ["serde"]
+serde = ["dep:serde"]

@@ -1,0 +1,29 @@
+[package]
+name = "app"
+description = "Richochet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+mdcore.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-store = "2"
+
+[target.'cfg(windows)'.dependencies]
+clipboard-win = "5.4"
+
+[target.'cfg(not(windows))'.dependencies]
+arboard = "3.6"

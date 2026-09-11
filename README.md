@@ -1,0 +1,57 @@
+# Richochet
+
+Paste rich text from Microsoft Teams, get clean Markdown. Write Markdown, copy it back into Teams
+with the formatting intact.
+
+*"rich text" + "ricochet"* — content bouncing between formats. The `h` is deliberate.
+
+Teams supports a Markdown-*style* syntax that Microsoft explicitly documents as **not** standard
+Markdown, so Richochet doesn't try to translate one syntax into the other. Everything normalizes
+into a small document model, and Markdown, HTML and plain text are each generated from that.
+
+## Quick start
+
+```sh
+just setup    # install dependencies (once)
+just dev      # run the app with hot reload
+just test     # the full suite
+just build    # release installer
+```
+
+`just` with no arguments lists every recipe. It is the only entry point — there is no raw
+`cargo`/`pnpm` incantation you are expected to remember.
+
+## How it's put together
+
+```text
+Teams clipboard ──► html::parse ──┐
+Markdown ─────────► markdown::parse ──►  Document  ──► markdown::render ──► Markdown
+Plain text ───────► text::parse ──┘      (the AST)  ──► html::render ─────► Teams clipboard
+                                                    └─► text::render ─────► plain text
+```
+
+- **`crates/mdcore`** — the conversion engine. Pure library, no Tauri, no I/O, tests run in
+  milliseconds. This is where the interesting work is.
+- **`src-tauri`** — a thin shell owning the window, the IPC surface and the Win32 clipboard.
+- **`src`** — React + TypeScript, two editor panes over one shared document.
+- **`tests/fixtures`** — the golden corpus. A newly discovered Teams quirk becomes a directory
+  here, not a branch in the code.
+
+The HTML dialect Teams accepts is expressed as **data** (`RenderProfile`), not baked into the
+renderer, so tuning fidelity means editing a struct literal and adding a fixture.
+
+## Docs
+
+| File | What it's for |
+|---|---|
+| `docs/plan.md` | Design rationale — why the architecture is shaped this way |
+| `docs/implementation-plan.md` | The phased build order, task tables, exit criteria |
+| `docs/clipboard-findings.md` | What Teams actually puts on the clipboard (Phase 1) |
+| `docs/adr/` | Decisions that would be expensive to reverse |
+| `AGENTS.md` | Working agreement for agents and contributors |
+
+## Status
+
+Pre-release. Windows only — the clipboard layer is Win32 by design
+(`docs/adr/0001-clipboard-strategy.md`); the `read`/`write` seam is platform-neutral, so other
+platforms are an additive change rather than a redesign.

@@ -1,0 +1,21 @@
+[package]
+name = "mdcli"
+description = "Richochet debug CLI: convert on the command line, inspect and capture the clipboard."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "mdcli"
+path = "src/main.rs"
+
+[dependencies]
+mdcore.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow = "1.0"
+clap = { version = "4.6", features = ["derive"] }
+
+[target.'cfg(windows)'.dependencies]
+clipboard-win = "5.4"

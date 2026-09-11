@@ -1,0 +1,1 @@
+call update_user_profile(id) now
