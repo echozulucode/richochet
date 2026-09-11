@@ -1,5 +1,6 @@
 ---
 source: crates/mdcore/tests/corpus.rs
+assertion_line: 57
 expression: "report(&input, Format::Markdown)"
 input_file: tests/fixtures/table-one-column/source.md
 ---
@@ -9,12 +10,12 @@ input_file: tests/fixtures/table-one-column/source.md
 | one  |
 
 === teams html ===
-<table>
+<table style="border-collapse:collapse">
 <thead>
-<tr><th>Only</th></tr>
+<tr><th style="border:1px solid #9aa0a6;padding:6px 10px">Only</th></tr>
 </thead>
 <tbody>
-<tr><td>one</td></tr>
+<tr><td style="border:1px solid #9aa0a6;padding:6px 10px">one</td></tr>
 </tbody>
 </table>
 

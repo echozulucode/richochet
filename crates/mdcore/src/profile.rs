@@ -45,6 +45,21 @@ pub enum NestingStrategy {
     MarginIndent,
 }
 
+/// How much of a table's appearance to write into the markup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TableStyle {
+    /// Structure only. The receiving document decides how it looks.
+    Plain,
+    /// Structure plus inline rules and cell padding.
+    ///
+    /// Clipboard HTML travels without a stylesheet, so a table that carries no styling of its own
+    /// arrives as a borderless grid of text — which is how a pasted table looked before this
+    /// existed. The border colour is deliberately a mid grey that reads against both a light and a
+    /// dark background, and there is **no** header fill: Teams has a dark theme, and a pale header
+    /// that looks right in one would look wrong in the other.
+    Ruled,
+}
+
 /// How to encode block quotes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QuoteStrategy {
@@ -73,6 +88,8 @@ pub struct RenderProfile {
     pub nested_lists: NestingStrategy,
     /// How to encode block quotes.
     pub blockquote: QuoteStrategy,
+    /// How much of a table's appearance to write into the markup.
+    pub tables: TableStyle,
     /// Emit a newline between block elements. Off for clipboard payloads, on for readable output.
     pub pretty: bool,
 }
@@ -89,17 +106,23 @@ impl RenderProfile {
             code_block: CodeBlockStrategy::PreCode,
             nested_lists: NestingStrategy::Native,
             blockquote: QuoteStrategy::Blockquote,
+            tables: TableStyle::Plain,
             pretty: false,
         }
     }
 
     /// The dialect written to the clipboard for Teams.
     ///
-    /// Currently identical to [`RenderProfile::standard`]. This is the Phase 1 hypothesis: that
-    /// Teams accepts well-formed semantic HTML. Every deviation discovered by the clipboard spike
-    /// gets encoded here, with a fixture and a line in `docs/clipboard-findings.md`.
+    /// Deviates from [`RenderProfile::standard`] in one place so far: tables are written with
+    /// their own rules, because clipboard HTML carries no stylesheet and an unstyled table pastes
+    /// as a borderless grid of text. Everything else is the Phase 1 hypothesis — that Teams
+    /// accepts well-formed semantic HTML — and every deviation the clipboard spike discovers gets
+    /// encoded here, with a fixture and a line in `docs/clipboard-findings.md`.
     pub fn teams() -> Self {
-        RenderProfile::standard()
+        RenderProfile {
+            tables: TableStyle::Ruled,
+            ..RenderProfile::standard()
+        }
     }
 
     /// A readable variant with newlines between blocks, for tests and CLI output.

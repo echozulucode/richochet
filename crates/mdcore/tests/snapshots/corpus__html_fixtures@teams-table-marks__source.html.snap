@@ -1,5 +1,6 @@
 ---
 source: crates/mdcore/tests/corpus.rs
+assertion_line: 66
 expression: "report(&input, Format::Html)"
 input_file: tests/fixtures/teams-table-marks/source.html
 ---
@@ -9,9 +10,9 @@ input_file: tests/fixtures/teams-table-marks/source.html
 | **bold** | [link](https://example.com) |
 
 === teams html ===
-<table>
+<table style="border-collapse:collapse">
 <tbody>
-<tr><td><strong>bold</strong></td><td><a href="https://example.com">link</a></td></tr>
+<tr><td style="border:1px solid #9aa0a6;padding:6px 10px"><strong>bold</strong></td><td style="border:1px solid #9aa0a6;padding:6px 10px"><a href="https://example.com">link</a></td></tr>
 </tbody>
 </table>
 

@@ -8,6 +8,7 @@
 use crate::document::model::{Alignment, Block, Document, Inline, List, Row, Table};
 use crate::profile::{
     CodeBlockStrategy, HeadingStrategy, MarkStyle, NestingStrategy, QuoteStrategy, RenderProfile,
+    TableStyle,
 };
 
 /// Indentation step, in pixels, for [`NestingStrategy::MarginIndent`].
@@ -190,7 +191,7 @@ impl Renderer<'_> {
             return;
         }
 
-        self.push("<table>");
+        self.push(&format!("<table{}>", self.table_attrs()));
         self.line_break();
         // An empty header is not written out at all: `<thead>` with blank cells reads as a real
         // but nameless header row, where no `<thead>` reads as a table that has none.
@@ -214,6 +215,26 @@ impl Renderer<'_> {
         self.line_break();
     }
 
+    /// The `<table>` element's own attributes under the current profile.
+    fn table_attrs(&self) -> &'static str {
+        match self.profile.tables {
+            TableStyle::Plain => "",
+            // `border-collapse` has to be on the table itself; without it every cell draws its own
+            // box and the rules come out doubled.
+            TableStyle::Ruled => " style=\"border-collapse:collapse\"",
+        }
+    }
+
+    /// The per-cell style rules under the current profile, if any.
+    fn cell_style(&self) -> Option<&'static str> {
+        match self.profile.tables {
+            TableStyle::Plain => None,
+            // A mid grey so the rules read against a light *or* a dark background - Teams has both,
+            // and the usual mail-client `#ccc` disappears entirely on dark.
+            TableStyle::Ruled => Some("border:1px solid #9aa0a6;padding:6px 10px"),
+        }
+    }
+
     /// One `<tr>`, padded out to `columns` so that a ragged row still renders rectangular.
     ///
     /// The model tolerates ragged rows because HTML in the wild is ragged; HTML rendering does
@@ -223,8 +244,19 @@ impl Renderer<'_> {
         self.push("<tr>");
         for column in 0..columns {
             self.push(&format!("<{tag}"));
-            if let Some(css) = align_style(table.alignment(column)) {
-                self.push(&format!(" style=\"text-align:{css}\""));
+            let mut css = String::new();
+            if let Some(rules) = self.cell_style() {
+                css.push_str(rules);
+            }
+            if let Some(align) = align_style(table.alignment(column)) {
+                if !css.is_empty() {
+                    css.push(';');
+                }
+                css.push_str("text-align:");
+                css.push_str(align);
+            }
+            if !css.is_empty() {
+                self.push(&format!(" style=\"{css}\""));
             }
             self.push(">");
             if let Some(cell) = row.get(column) {
@@ -916,6 +948,55 @@ mod tests {
         );
     }
 
+    #[test]
+    fn the_standard_profile_leaves_tables_unstyled() {
+        let got = std_render(vec![Block::Table(Table {
+            head: vec![vec![Inline::text("H")]],
+            align: vec![],
+            rows: vec![vec![vec![Inline::text("a")]]],
+        })]);
+        assert!(
+            !got.contains("border"),
+            "standard profile should not style tables: {got}"
+        );
+        assert!(
+            !got.contains("padding"),
+            "standard profile should not style tables: {got}"
+        );
+    }
+
+    #[test]
+    fn the_teams_profile_rules_its_tables() {
+        // Clipboard HTML travels without a stylesheet, so a table that carries no styling of its
+        // own pastes as a borderless grid of text.
+        let doc = doc(vec![Block::Table(Table {
+            head: vec![vec![Inline::text("H")]],
+            align: vec![Alignment::Center],
+            rows: vec![vec![vec![Inline::text("a")]]],
+        })]);
+        let got = render(&doc, &RenderProfile::teams());
+
+        assert!(got.contains("border-collapse:collapse"), "{got}");
+        assert!(got.contains("border:1px solid"), "{got}");
+        assert!(got.contains("padding:"), "{got}");
+        // Alignment still rides along in the same style attribute rather than being displaced.
+        assert!(got.contains("text-align:center"), "{got}");
+        // No header fill: Teams has a dark theme, and a pale one would look wrong there.
+        assert!(!got.contains("background"), "{got}");
+    }
+
+    #[test]
+    fn ruled_tables_still_parse_back_to_the_same_table() {
+        let doc = doc(vec![Block::Table(Table {
+            head: vec![vec![Inline::text("H")], vec![Inline::text("I")]],
+            align: vec![Alignment::None, Alignment::Right],
+            rows: vec![vec![vec![Inline::text("a")], vec![Inline::bold("b")]]],
+        })]);
+        let html = render(&doc, &RenderProfile::teams());
+        // The styling must not confuse our own parser on the way back in.
+        assert_eq!(crate::html::parse(&html), doc);
+    }
+
     /// Exercise every strategy variant at once, and confirm the parser still recognizes the
     /// intent of the resulting markup even in the deviant dialects.
     #[test]
@@ -929,6 +1010,7 @@ mod tests {
             code_block: CodeBlockStrategy::MonospaceDiv,
             nested_lists: NestingStrategy::MarginIndent,
             blockquote: QuoteStrategy::TextPrefix,
+            tables: TableStyle::Ruled,
             pretty: false,
         };
         let source = doc(vec![Block::Paragraph(vec![

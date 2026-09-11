@@ -195,6 +195,62 @@ body {
   margin: 1.4em 0;
 }
 
+/* ---------------------------------------------------------------- tables */
+
+/* A table with no rules and no padding barely reads as a table at all — which is how these
+ * arrived, since nothing styled them. Lines and breathing room are most of what makes a grid
+ * legible, so both are deliberate rather than decorative. */
+
+.rich-surface .tiptap table {
+  border-collapse: collapse;
+  /* `auto` rather than TipTap's `fixed`: column resizing is off (widths are presentation the AST
+   * cannot carry), so letting content size the columns reads far better. */
+  table-layout: auto;
+  width: auto;
+  max-width: 100%;
+  margin: 1.1em 0;
+  font-size: 0.9375em;
+}
+
+.rich-surface .tiptap table td,
+.rich-surface .tiptap table th {
+  border: 1px solid var(--line-strong);
+  padding: 0.4em 0.7em;
+  vertical-align: top;
+  /* Cells hold block content, so a long cell wraps instead of forcing the table wider than the
+   * pane. `min-width` keeps an empty cell from collapsing to a sliver. */
+  min-width: 3em;
+}
+
+.rich-surface .tiptap table th {
+  background: var(--code-bg);
+  font-weight: 600;
+  text-align: left;
+}
+
+/* Cells hold paragraphs, and a paragraph's own margin would make every row twice as tall. */
+.rich-surface .tiptap table td > p,
+.rich-surface .tiptap table th > p {
+  margin: 0;
+}
+.rich-surface .tiptap table td > * + *,
+.rich-surface .tiptap table th > * + * {
+  margin-top: 0.4em;
+}
+
+/* ProseMirror's cell selection, which is invisible without a rule of its own. */
+.rich-surface .tiptap table .selectedCell::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  pointer-events: none;
+}
+.rich-surface .tiptap table td,
+.rich-surface .tiptap table th {
+  position: relative;
+}
+
 /* Empty-document hint without pulling in another TipTap extension.
  *
  * The `:only-child` on the `<br>` is load-bearing. ProseMirror appends a `ProseMirror-trailingBreak`

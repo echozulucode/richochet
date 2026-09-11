@@ -1,5 +1,6 @@
 ---
 source: crates/mdcore/tests/corpus.rs
+assertion_line: 57
 expression: "report(&input, Format::Markdown)"
 input_file: tests/fixtures/table-pipe-in-cell/source.md
 ---
@@ -9,12 +10,12 @@ input_file: tests/fixtures/table-pipe-in-cell/source.md
 | `a \| b`   | either  |
 
 === teams html ===
-<table>
+<table style="border-collapse:collapse">
 <thead>
-<tr><th>Expression</th><th>Meaning</th></tr>
+<tr><th style="border:1px solid #9aa0a6;padding:6px 10px">Expression</th><th style="border:1px solid #9aa0a6;padding:6px 10px">Meaning</th></tr>
 </thead>
 <tbody>
-<tr><td><code>a | b</code></td><td>either</td></tr>
+<tr><td style="border:1px solid #9aa0a6;padding:6px 10px"><code>a | b</code></td><td style="border:1px solid #9aa0a6;padding:6px 10px">either</td></tr>
 </tbody>
 </table>
 

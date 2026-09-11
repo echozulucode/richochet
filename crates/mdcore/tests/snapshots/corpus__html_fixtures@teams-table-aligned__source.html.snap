@@ -1,5 +1,6 @@
 ---
 source: crates/mdcore/tests/corpus.rs
+assertion_line: 66
 expression: "report(&input, Format::Html)"
 input_file: tests/fixtures/teams-table-aligned/source.html
 ---
@@ -9,12 +10,12 @@ input_file: tests/fixtures/teams-table-aligned/source.html
 | 1   |  2  |   3 |
 
 === teams html ===
-<table>
+<table style="border-collapse:collapse">
 <thead>
-<tr><th style="text-align:left">L</th><th style="text-align:center">C</th><th style="text-align:right">R</th></tr>
+<tr><th style="border:1px solid #9aa0a6;padding:6px 10px;text-align:left">L</th><th style="border:1px solid #9aa0a6;padding:6px 10px;text-align:center">C</th><th style="border:1px solid #9aa0a6;padding:6px 10px;text-align:right">R</th></tr>
 </thead>
 <tbody>
-<tr><td style="text-align:left">1</td><td style="text-align:center">2</td><td style="text-align:right">3</td></tr>
+<tr><td style="border:1px solid #9aa0a6;padding:6px 10px;text-align:left">1</td><td style="border:1px solid #9aa0a6;padding:6px 10px;text-align:center">2</td><td style="border:1px solid #9aa0a6;padding:6px 10px;text-align:right">3</td></tr>
 </tbody>
 </table>
 

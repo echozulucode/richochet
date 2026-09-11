@@ -1,5 +1,6 @@
 ---
 source: crates/mdcore/tests/corpus.rs
+assertion_line: 57
 expression: "report(&input, Format::Markdown)"
 input_file: tests/fixtures/table-marks-in-cells/source.md
 ---
@@ -10,13 +11,13 @@ input_file: tests/fixtures/table-marks-in-cells/source.md
 | `code`   | ~~gone~~                      |
 
 === teams html ===
-<table>
+<table style="border-collapse:collapse">
 <thead>
-<tr><th>Item</th><th>Note</th></tr>
+<tr><th style="border:1px solid #9aa0a6;padding:6px 10px">Item</th><th style="border:1px solid #9aa0a6;padding:6px 10px">Note</th></tr>
 </thead>
 <tbody>
-<tr><td><strong>bold</strong></td><td>a <a href="https://example.com">link</a></td></tr>
-<tr><td><code>code</code></td><td><s>gone</s></td></tr>
+<tr><td style="border:1px solid #9aa0a6;padding:6px 10px"><strong>bold</strong></td><td style="border:1px solid #9aa0a6;padding:6px 10px">a <a href="https://example.com">link</a></td></tr>
+<tr><td style="border:1px solid #9aa0a6;padding:6px 10px"><code>code</code></td><td style="border:1px solid #9aa0a6;padding:6px 10px"><s>gone</s></td></tr>
 </tbody>
 </table>
 

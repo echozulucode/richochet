@@ -1,5 +1,6 @@
 ---
 source: crates/mdcore/tests/corpus.rs
+assertion_line: 66
 expression: "report(&input, Format::Html)"
 input_file: tests/fixtures/teams-table-degrades/source.html
 ---
@@ -9,9 +10,9 @@ input_file: tests/fixtures/teams-table-degrades/source.html
 | a   | b   |
 
 === teams html ===
-<table>
+<table style="border-collapse:collapse">
 <tbody>
-<tr><td>a</td><td>b</td></tr>
+<tr><td style="border:1px solid #9aa0a6;padding:6px 10px">a</td><td style="border:1px solid #9aa0a6;padding:6px 10px">b</td></tr>
 </tbody>
 </table>
 

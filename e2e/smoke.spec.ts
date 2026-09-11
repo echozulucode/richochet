@@ -59,4 +59,38 @@ test.describe('app shell', () => {
     expect(painted).toBe(false);
     await expect(rich).toContainText('hello');
   });
+
+  test('tables are ruled and padded, not a bare grid of text', async ({ page }) => {
+    await openApp(page);
+
+    const md = page.getByTestId('editor-markdown');
+    await md.click();
+    // The `table-simple` fixture verbatim: the mock only answers for inputs the oracle knows,
+    // and a passthrough would render no table at all.
+    await md.pressSequentially(
+      '| Component | Status |\n| --- | --- |\n| Engine | Done |\n| Clipboard | Blocked |',
+    );
+    await page.waitForTimeout(1200);
+
+    const cell = page.getByTestId('editor-rich').locator('td').first();
+    await expect(cell).toBeVisible();
+
+    const style = await cell.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        border: parseFloat(s.borderTopWidth),
+        padX: parseFloat(s.paddingLeft),
+        padY: parseFloat(s.paddingTop),
+        collapse: getComputedStyle(el.closest('table')).borderCollapse,
+      };
+    });
+
+    // Lines and breathing room are most of what makes a grid legible; with neither it barely
+    // reads as a table at all, which is how it arrived before anything styled it.
+    expect(style.border).toBeGreaterThan(0);
+    expect(style.padX).toBeGreaterThan(4);
+    expect(style.padY).toBeGreaterThan(2);
+    // Without collapse every cell draws its own box and the rules come out doubled.
+    expect(style.collapse).toBe('collapse');
+  });
 });

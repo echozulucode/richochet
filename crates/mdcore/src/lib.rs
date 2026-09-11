@@ -20,7 +20,7 @@ pub mod profile;
 pub mod text;
 
 pub use document::model::{Alignment, Block, Cell, Document, Inline, List, ListItem, Row, Table};
-pub use profile::RenderProfile;
+pub use profile::{RenderProfile, TableStyle};
 
 /// A wire format the engine can read from and write to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
