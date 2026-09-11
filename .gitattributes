@@ -1,0 +1,11 @@
+# Normalize to LF in the repo and in the working tree. Rust, TS and the corpus are all
+# line-ending sensitive in ways that are painful to debug.
+* text=auto eol=lf
+
+# Fixtures are test data: their bytes are the point. Never touch line endings here — a fixture
+# rewritten to CRLF silently changes what the corpus asserts.
+tests/fixtures/** -text
+
+*.png binary
+*.ico binary
+*.icns binary
