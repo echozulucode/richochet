@@ -187,7 +187,9 @@ mod tests {
             blocks: vec![Block::List(List::bulleted(vec![ListItem {
                 blocks: vec![
                     Block::para("outer"),
-                    Block::List(List::bulleted(vec![ListItem::of(vec![Inline::text("inner")])])),
+                    Block::List(List::bulleted(vec![ListItem::of(vec![Inline::text(
+                        "inner",
+                    )])])),
                 ],
             }]))],
         };

@@ -1,0 +1,18 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-paragraphs/source.md
+---
+=== markdown ===
+First paragraph.
+
+Second paragraph.
+
+=== teams html ===
+<p>First paragraph.</p>
+<p>Second paragraph.</p>
+
+=== plain text ===
+First paragraph.
+
+Second paragraph.

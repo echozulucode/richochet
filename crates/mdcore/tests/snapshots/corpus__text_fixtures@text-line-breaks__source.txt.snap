@@ -1,0 +1,19 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Text)"
+input_file: tests/fixtures/text-line-breaks/source.txt
+---
+=== markdown ===
+Shopping:\
+milk\
+bread\
+eggs
+
+=== teams html ===
+<p>Shopping:<br>milk<br>bread<br>eggs</p>
+
+=== plain text ===
+Shopping:
+milk
+bread
+eggs

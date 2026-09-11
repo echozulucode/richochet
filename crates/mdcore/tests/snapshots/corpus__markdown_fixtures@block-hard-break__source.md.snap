@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-hard-break/source.md
+---
+=== markdown ===
+line one\\nline two
+
+=== teams html ===
+<p>line one\nline two</p>
+
+=== plain text ===
+line one\nline two

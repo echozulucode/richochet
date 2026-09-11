@@ -130,21 +130,21 @@ fn apply_style(marks: &mut MarkSet, style: &str) {
                     marks.strike = Some(false);
                 }
             }
-            "font-family" => {
-                if MONOSPACE_FAMILIES
-                    .iter()
-                    .any(|family| value.contains(family))
-                {
-                    marks.code = Some(true);
-                }
-                // A proportional font is deliberately *not* treated as `code: Some(false)`.
-                // Producers set `font-family` on nearly every element for reasons that have
-                // nothing to do with code, so reading it as a removal would cancel real
-                // `<code>` marks far more often than it would help.
-            }
+            // A proportional font is deliberately *not* treated as `code: Some(false)`:
+            // producers set `font-family` on nearly every element for reasons that have nothing
+            // to do with code, so reading it as a removal would cancel real `<code>` marks far
+            // more often than it would help.
+            "font-family" if is_monospace(&value) => marks.code = Some(true),
             _ => {}
         }
     }
+}
+
+/// Whether a `font-family` value names a monospace face.
+fn is_monospace(value: &str) -> bool {
+    MONOSPACE_FAMILIES
+        .iter()
+        .any(|family| value.contains(family))
 }
 
 /// Interpret a `font-weight` value: `Some(true)` for bold, `Some(false)` for explicitly
@@ -239,7 +239,10 @@ mod tests {
 
     #[test]
     fn font_style_signals_italic_both_ways() {
-        assert_eq!(marks_for("span", Some("font-style:italic")).italic, Some(true));
+        assert_eq!(
+            marks_for("span", Some("font-style:italic")).italic,
+            Some(true)
+        );
         assert_eq!(
             marks_for("span", Some("font-style: oblique")).italic,
             Some(true)

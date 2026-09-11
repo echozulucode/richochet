@@ -3,9 +3,9 @@
 Paste rich text from Microsoft Teams, get clean Markdown. Write Markdown, copy it back into Teams
 with the formatting intact.
 
-*"rich text" + "ricochet"* — content bouncing between formats. The `h` is deliberate.
+_"rich text" + "ricochet"_ — content bouncing between formats. The `h` is deliberate.
 
-Teams supports a Markdown-*style* syntax that Microsoft explicitly documents as **not** standard
+Teams supports a Markdown-_style_ syntax that Microsoft explicitly documents as **not** standard
 Markdown, so Richochet doesn't try to translate one syntax into the other. Everything normalizes
 into a small document model, and Markdown, HTML and plain text are each generated from that.
 
@@ -42,13 +42,13 @@ renderer, so tuning fidelity means editing a struct literal and adding a fixture
 
 ## Docs
 
-| File | What it's for |
-|---|---|
-| `docs/plan.md` | Design rationale — why the architecture is shaped this way |
-| `docs/implementation-plan.md` | The phased build order, task tables, exit criteria |
-| `docs/clipboard-findings.md` | What Teams actually puts on the clipboard (Phase 1) |
-| `docs/adr/` | Decisions that would be expensive to reverse |
-| `AGENTS.md` | Working agreement for agents and contributors |
+| File                          | What it's for                                              |
+| ----------------------------- | ---------------------------------------------------------- |
+| `docs/plan.md`                | Design rationale — why the architecture is shaped this way |
+| `docs/implementation-plan.md` | The phased build order, task tables, exit criteria         |
+| `docs/clipboard-findings.md`  | What Teams actually puts on the clipboard (Phase 1)        |
+| `docs/adr/`                   | Decisions that would be expensive to reverse               |
+| `AGENTS.md`                   | Working agreement for agents and contributors              |
 
 ## Status
 

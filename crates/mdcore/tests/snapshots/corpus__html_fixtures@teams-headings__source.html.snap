@@ -1,0 +1,23 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-headings/source.html
+---
+=== markdown ===
+# One
+
+## Two
+
+### Three
+
+=== teams html ===
+<h1>One</h1>
+<h2>Two</h2>
+<h3>Three</h3>
+
+=== plain text ===
+One
+
+Two
+
+Three

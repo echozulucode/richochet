@@ -1,0 +1,21 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-code-with-fence/source.md
+---
+=== markdown ===
+````
+```
+nested fence
+```
+````
+
+=== teams html ===
+<pre><code>```
+nested fence
+```</code></pre>
+
+=== plain text ===
+```
+nested fence
+```

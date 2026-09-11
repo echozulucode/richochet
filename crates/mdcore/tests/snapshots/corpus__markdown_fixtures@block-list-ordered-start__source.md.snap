@@ -1,0 +1,18 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-list-ordered-start/source.md
+---
+=== markdown ===
+5. Fifth
+6. Sixth
+
+=== teams html ===
+<ol start="5">
+<li>Fifth</li>
+<li>Sixth</li>
+</ol>
+
+=== plain text ===
+5. Fifth
+6. Sixth

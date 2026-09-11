@@ -1,0 +1,21 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-code-fenced/source.md
+---
+=== markdown ===
+```rust
+fn main() {
+    println!("hi");
+}
+```
+
+=== teams html ===
+<pre><code class="language-rust">fn main() {
+    println!("hi");
+}</code></pre>
+
+=== plain text ===
+fn main() {
+    println!("hi");
+}

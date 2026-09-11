@@ -74,11 +74,7 @@ pub struct OutboundPayload {
 
 /// Convert `input` from one format to another through the document model.
 #[tauri::command]
-pub fn convert(
-    input: String,
-    from: WireFormat,
-    to: WireFormat,
-) -> Result<String, CommandError> {
+pub fn convert(input: String, from: WireFormat, to: WireFormat) -> Result<String, CommandError> {
     let profile = RenderProfile::teams();
     Ok(mdcore::convert_with(
         &input,

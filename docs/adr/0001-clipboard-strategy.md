@@ -11,7 +11,7 @@ back. Tauri's official `clipboard-manager` plugin exposes `readText()`, images a
 but **no rich-HTML read**, so it cannot do the primary job. Three options were on the table:
 
 1. **`tauri-plugin-clipboard` 2.1.11** (community, CrossCopy) — advertises text, HTML, RTF, image
-   and file read *and* write.
+   and file read _and_ write.
 2. **`arboard` 3.6** — cross-platform, can `set_html`, but reads only text and images. Same gap as
    the official plugin.
 3. **`clipboard-win` 5.4 directly** — raw Win32 clipboard access.

@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-styled-bold/source.html
+---
+=== markdown ===
+**Important**
+
+=== teams html ===
+<p><strong>Important</strong></p>
+
+=== plain text ===
+Important

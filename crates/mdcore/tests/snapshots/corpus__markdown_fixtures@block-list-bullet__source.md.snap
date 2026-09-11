@@ -1,0 +1,18 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-list-bullet/source.md
+---
+=== markdown ===
+- Item one
+- Item two
+
+=== teams html ===
+<ul>
+<li>Item one</li>
+<li>Item two</li>
+</ul>
+
+=== plain text ===
+• Item one
+• Item two

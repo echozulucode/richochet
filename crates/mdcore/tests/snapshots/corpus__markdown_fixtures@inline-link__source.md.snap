@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/inline-link/source.md
+---
+=== markdown ===
+See [the docs](https://example.com) for more.
+
+=== teams html ===
+<p>See <a href="https://example.com">the docs</a> for more.</p>
+
+=== plain text ===
+See the docs for more.

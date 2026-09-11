@@ -1,0 +1,53 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-mixed-document/source.md
+---
+=== markdown ===
+# Release notes
+
+Some **important** context with a [link](https://example.com).
+
+- First point
+  - A nested detail
+- Second point
+
+> A caution worth reading.
+
+```bash
+just build
+```
+
+That's all.
+
+=== teams html ===
+<h1>Release notes</h1>
+<p>Some <strong>important</strong> context with a <a href="https://example.com">link</a>.</p>
+<ul>
+<li>First point
+<ul>
+<li>A nested detail</li>
+</ul>
+</li>
+<li>Second point</li>
+</ul>
+<blockquote>
+<p>A caution worth reading.</p>
+</blockquote>
+<pre><code class="language-bash">just build</code></pre>
+<p>That's all.</p>
+
+=== plain text ===
+Release notes
+
+Some important context with a link.
+
+• First point
+  • A nested detail
+• Second point
+
+> A caution worth reading.
+
+just build
+
+That's all.

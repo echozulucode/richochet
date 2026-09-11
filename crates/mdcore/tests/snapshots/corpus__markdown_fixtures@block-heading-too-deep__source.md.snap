@@ -1,0 +1,18 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-heading-too-deep/source.md
+---
+=== markdown ===
+### Four
+
+### Five
+
+=== teams html ===
+<h3>Four</h3>
+<h3>Five</h3>
+
+=== plain text ===
+Four
+
+Five

@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-split-anchor/source.html
+---
+=== markdown ===
+[example](https://example.com)
+
+=== teams html ===
+<p><a href="https://example.com">example</a></p>
+
+=== plain text ===
+example

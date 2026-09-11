@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/inline-code-with-backtick/source.md
+---
+=== markdown ===
+a ``b ` c`` d
+
+=== teams html ===
+<p>a <code>b ` c</code> d</p>
+
+=== plain text ===
+a b ` c d

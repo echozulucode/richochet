@@ -157,7 +157,8 @@ mod tests {
 
     #[test]
     fn escapes_autolink_and_entity_openers() {
-        assert_eq!(escape_inline("<b> &amp;"), r"\<b\> \&amp;");
+        // `>` is harmless mid-line once `<` is escaped; it only matters at line start.
+        assert_eq!(escape_inline("<b> &amp;"), r"\<b> \&amp;");
     }
 
     #[test]
@@ -202,7 +203,10 @@ mod tests {
 
     #[test]
     fn line_start_escapes_setext_underlines() {
-        assert_eq!(escape_line_start("=== not a heading"), r"\=== not a heading");
+        assert_eq!(
+            escape_line_start("=== not a heading"),
+            r"\=== not a heading"
+        );
         assert_eq!(escape_line_start("---"), r"\---");
     }
 

@@ -1,0 +1,15 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-blockquote/source.html
+---
+=== markdown ===
+> quoted
+
+=== teams html ===
+<blockquote>
+<p>quoted</p>
+</blockquote>
+
+=== plain text ===
+> quoted

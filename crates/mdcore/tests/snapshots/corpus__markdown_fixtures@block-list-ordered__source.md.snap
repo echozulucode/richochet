@@ -1,0 +1,18 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-list-ordered/source.md
+---
+=== markdown ===
+1. First
+2. Second
+
+=== teams html ===
+<ol>
+<li>First</li>
+<li>Second</li>
+</ol>
+
+=== plain text ===
+1. First
+2. Second

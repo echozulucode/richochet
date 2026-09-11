@@ -1,0 +1,22 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-blockquote-nested/source.md
+---
+=== markdown ===
+> outer
+>
+> > inner
+
+=== teams html ===
+<blockquote>
+<p>outer</p>
+<blockquote>
+<p>inner</p>
+</blockquote>
+</blockquote>
+
+=== plain text ===
+> outer
+> 
+> > inner

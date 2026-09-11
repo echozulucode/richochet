@@ -18,7 +18,7 @@
 use std::collections::{HashMap, HashSet};
 
 use html5ever::tendril::TendrilSink;
-use html5ever::{local_name, namespace_url, ns, parse_fragment, ParseOpts, QualName};
+use html5ever::{local_name, ns, parse_fragment, ParseOpts, QualName};
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
 
 use crate::document::model::{Block, Document, Inline, List, ListItem};
@@ -54,12 +54,75 @@ pub fn parse(input: &str) -> Document {
 pub fn sanitize(input: &str) -> String {
     // Everything the walker understands, plus the containers producers wrap content in.
     let tags: HashSet<&str> = HashSet::from([
-        "a", "abbr", "address", "article", "aside", "b", "big", "blockquote", "br", "caption",
-        "center", "cite", "code", "col", "colgroup", "dd", "del", "details", "dfn", "div", "dl",
-        "dt", "em", "figcaption", "figure", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "header",
-        "hgroup", "hr", "i", "img", "ins", "kbd", "li", "main", "mark", "nav", "ol", "p", "pre",
-        "q", "s", "samp", "section", "small", "span", "strike", "strong", "sub", "summary", "sup",
-        "table", "tbody", "td", "tfoot", "th", "thead", "tr", "tt", "u", "ul", "var", "wbr",
+        "a",
+        "abbr",
+        "address",
+        "article",
+        "aside",
+        "b",
+        "big",
+        "blockquote",
+        "br",
+        "caption",
+        "center",
+        "cite",
+        "code",
+        "col",
+        "colgroup",
+        "dd",
+        "del",
+        "details",
+        "dfn",
+        "div",
+        "dl",
+        "dt",
+        "em",
+        "figcaption",
+        "figure",
+        "footer",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "header",
+        "hgroup",
+        "hr",
+        "i",
+        "img",
+        "ins",
+        "kbd",
+        "li",
+        "main",
+        "mark",
+        "nav",
+        "ol",
+        "p",
+        "pre",
+        "q",
+        "s",
+        "samp",
+        "section",
+        "small",
+        "span",
+        "strike",
+        "strong",
+        "sub",
+        "summary",
+        "sup",
+        "table",
+        "tbody",
+        "td",
+        "tfoot",
+        "th",
+        "thead",
+        "tr",
+        "tt",
+        "u",
+        "ul",
+        "var",
+        "wbr",
     ]);
     // Attributes allowed anywhere. `style` is the whole point of `styles.rs`; `class` carries the
     // `language-*` hint on code blocks.
@@ -592,7 +655,7 @@ fn code_language(pre: &Handle) -> Option<String> {
 /// The lowercase local name of an element node, or `None` for anything else.
 fn tag_name(node: &Handle) -> Option<String> {
     match &node.data {
-        NodeData::Element { name, .. } => Some(name.local.to_ascii_lowercase()),
+        NodeData::Element { name, .. } => Some((*name.local).to_ascii_lowercase()),
         _ => None,
     }
 }
@@ -605,7 +668,7 @@ fn attr(node: &Handle, wanted: &str) -> Option<String> {
     attrs
         .borrow()
         .iter()
-        .find(|a| a.name.local.eq_ignore_ascii_case(wanted))
+        .find(|a| (*a.name.local).eq_ignore_ascii_case(wanted))
         .map(|a| a.value.to_string())
 }
 
@@ -776,7 +839,9 @@ mod tests {
 
     #[test]
     fn an_ordered_list_reads_its_start() {
-        let Some(Block::List(list)) = blocks(r#"<ol start="3"><li>x</li></ol>"#).into_iter().next()
+        let Some(Block::List(list)) = blocks(r#"<ol start="3"><li>x</li></ol>"#)
+            .into_iter()
+            .next()
         else {
             panic!("expected a list");
         };
@@ -787,7 +852,8 @@ mod tests {
 
     #[test]
     fn paragraph_wrapped_items_make_a_loose_list() {
-        let Some(Block::List(list)) = blocks("<ul><li><p>x</p></li></ul>").into_iter().next() else {
+        let Some(Block::List(list)) = blocks("<ul><li><p>x</p></li></ul>").into_iter().next()
+        else {
             panic!("expected a list");
         };
         assert!(!list.tight);
@@ -892,9 +958,8 @@ mod tests {
     fn a_link_split_across_anchors_is_rejoined() {
         // Teams does this constantly. The normalizer merges them; this proves the parser feeds it
         // the shape it needs.
-        let got = para(
-            r#"<a href="https://example.com">exa</a><a href="https://example.com">mple</a>"#,
-        );
+        let got =
+            para(r#"<a href="https://example.com">exa</a><a href="https://example.com">mple</a>"#);
         assert_eq!(got, vec![Inline::link("https://example.com", "example")]);
     }
 
@@ -913,7 +978,8 @@ mod tests {
 
     #[test]
     fn a_table_degrades_to_unsupported_with_its_cell_text() {
-        let got = blocks("<table><tr><th>h1</th><th>h2</th></tr><tr><td>a</td><td>b</td></tr></table>");
+        let got =
+            blocks("<table><tr><th>h1</th><th>h2</th></tr><tr><td>a</td><td>b</td></tr></table>");
         assert_eq!(
             got,
             vec![Block::Unsupported {
@@ -947,7 +1013,10 @@ mod tests {
         let cleaned = sanitize(r#"<div onclick="steal()"><iframe src="evil"></iframe>text</div>"#);
         assert!(!cleaned.contains("onclick"), "{cleaned}");
         assert!(!cleaned.contains("iframe"), "{cleaned}");
-        assert_eq!(blocks(r#"<div onclick="steal()">text</div>"#), vec![Block::para("text")]);
+        assert_eq!(
+            blocks(r#"<div onclick="steal()">text</div>"#),
+            vec![Block::para("text")]
+        );
     }
 
     #[test]
@@ -960,7 +1029,10 @@ mod tests {
 
     #[test]
     fn non_breaking_spaces_are_not_collapsed() {
-        assert_eq!(para("a\u{a0}\u{a0}b   c"), vec![Inline::text("a\u{a0}\u{a0}b c")]);
+        assert_eq!(
+            para("a\u{a0}\u{a0}b   c"),
+            vec![Inline::text("a\u{a0}\u{a0}b c")]
+        );
     }
 
     #[test]

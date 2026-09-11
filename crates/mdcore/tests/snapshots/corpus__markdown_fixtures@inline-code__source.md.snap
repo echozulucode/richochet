@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/inline-code/source.md
+---
+=== markdown ===
+use `cargo test` here
+
+=== teams html ===
+<p>use <code>cargo test</code> here</p>
+
+=== plain text ===
+use cargo test here

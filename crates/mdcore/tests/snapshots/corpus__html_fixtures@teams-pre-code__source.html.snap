@@ -1,0 +1,21 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-pre-code/source.html
+---
+=== markdown ===
+```rust
+fn main() {
+    let x = 1;
+}
+```
+
+=== teams html ===
+<pre><code class="language-rust">fn main() {
+    let x = 1;
+}</code></pre>
+
+=== plain text ===
+fn main() {
+    let x = 1;
+}

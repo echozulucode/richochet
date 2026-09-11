@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/inline-bold/source.md
+---
+=== markdown ===
+**Hello Eric**
+
+=== teams html ===
+<p><strong>Hello Eric</strong></p>
+
+=== plain text ===
+Hello Eric

@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-table-degrades/source.html
+---
+=== markdown ===
+a | b
+
+=== teams html ===
+<p>a | b</p>
+
+=== plain text ===
+a | b

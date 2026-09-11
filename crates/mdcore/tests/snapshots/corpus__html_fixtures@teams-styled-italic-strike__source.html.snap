@@ -1,0 +1,14 @@
+---
+source: crates/mdcore/tests/corpus.rs
+assertion_line: 66
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-styled-italic-strike/source.html
+---
+=== markdown ===
+*it* and ~~gone~~
+
+=== teams html ===
+<p><em>it</em> and <s>gone</s></p>
+
+=== plain text ===
+it and gone

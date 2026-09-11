@@ -1,0 +1,15 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Text)"
+input_file: tests/fixtures/text-markdown-lookalike/source.txt
+---
+=== markdown ===
+use \*stars\* and \_underscores\_ and a # hash\
+2\. not a list
+
+=== teams html ===
+<p>use *stars* and _underscores_ and a # hash<br>2. not a list</p>
+
+=== plain text ===
+use *stars* and _underscores_ and a # hash
+2. not a list

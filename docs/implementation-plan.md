@@ -1,7 +1,7 @@
 # Implementation Plan — Richochet
 
-Derived from [`plan.md`](plan.md). That document is the *design rationale*; this one is the
-*build order*. Where the two disagree, this document wins and `plan.md` should be updated.
+Derived from [`plan.md`](plan.md). That document is the _design rationale_; this one is the
+_build order_. Where the two disagree, this document wins and `plan.md` should be updated.
 
 **Audience:** the lead agent and a team of subagents. Every phase states a goal, machine-checkable
 exit criteria, a task table (with the files each task owns, so tasks can be fanned out without
@@ -14,8 +14,8 @@ collisions), and the risks that phase exists to retire.
 ### Contract-first fan-out
 
 Subagents may only work in parallel on tasks that touch **disjoint file sets**. The shared
-interfaces — the document AST, the Tauri command signatures, the fixture layout — are *frozen
-first, by a single agent*, before any fan-out. Task tables mark each task `parallel` (safe to run
+interfaces — the document AST, the Tauri command signatures, the fixture layout — are _frozen
+first, by a single agent_, before any fan-out. Task tables mark each task `parallel` (safe to run
 concurrently with its siblings) or `serial` (must complete before the rest of the phase).
 
 ### Definition of done (every task)
@@ -30,13 +30,13 @@ concurrently with its siblings) or `serial` (must complete before the rest of th
 ### Verification discipline
 
 No agent reports a phase complete on the strength of "it should work". Exit criteria are written so
-they can be *run*. If a criterion cannot be automated (e.g. "paste into Teams Desktop and the bold
+they can be _run_. If a criterion cannot be automated (e.g. "paste into Teams Desktop and the bold
 survives"), it is a **manual checklist item** and the agent must say plainly that it needs the user
 to run it.
 
 ### Naming
 
-- Product name **Richochet** — "rich text" + *ricochet*, content bouncing between formats. The `h`
+- Product name **Richochet** — "rich text" + _ricochet_, content bouncing between formats. The `h`
   is deliberate; it is not a typo and must never be "corrected" to `Ricochet` in code, config, docs
   or UI copy.
 - Bundle id `com.echozed.richochet`. Repo dir stays `markdown-converter`. Window title `Richochet`.
@@ -124,30 +124,30 @@ markdown-converter/
 
 Verified against the registries on 2026-09-10. Pin these; do not float.
 
-| Rust | Version | Role |
-|---|---|---|
-| `tauri` / `tauri-build` | 2 | shell |
-| `tauri-plugin-clipboard` | 2.1.11 | **community** plugin — text/html/rtf/image/files, read + write |
-| `tauri-plugin-store` | 2.4.4 | preferences only |
-| `pulldown-cmark` | 0.13 | Markdown -> events |
-| `html5ever` + `markup5ever_rcdom` | 0.39 | browser-grade HTML parse |
-| `ammonia` | 4.1 | sanitize untrusted clipboard HTML |
-| `clipboard-win` | 5.4 | raw Windows format enumeration (spike + fallback) |
-| `thiserror` | 2.0 | error types |
-| `insta` | 1.48 | snapshot review |
-| `proptest` | 1.11 | round-trip invariants |
+| Rust                              | Version | Role                                                           |
+| --------------------------------- | ------- | -------------------------------------------------------------- |
+| `tauri` / `tauri-build`           | 2       | shell                                                          |
+| `tauri-plugin-clipboard`          | 2.1.11  | **community** plugin — text/html/rtf/image/files, read + write |
+| `tauri-plugin-store`              | 2.4.4   | preferences only                                               |
+| `pulldown-cmark`                  | 0.13    | Markdown -> events                                             |
+| `html5ever` + `markup5ever_rcdom` | 0.39    | browser-grade HTML parse                                       |
+| `ammonia`                         | 4.1     | sanitize untrusted clipboard HTML                              |
+| `clipboard-win`                   | 5.4     | raw Windows format enumeration (spike + fallback)              |
+| `thiserror`                       | 2.0     | error types                                                    |
+| `insta`                           | 1.48    | snapshot review                                                |
+| `proptest`                        | 1.11    | round-trip invariants                                          |
 
-| Frontend | Version |
-|---|---|
-| `@tauri-apps/api` / `@tauri-apps/cli` | 2.11 |
-| `react` | 19.3 |
-| `vite` | 8.3 |
-| `tailwindcss` + `@tailwindcss/vite` | 4.3 |
-| `@tiptap/react` | 3.31 |
-| `codemirror` + `@codemirror/lang-markdown` | 6.x |
-| `zustand` | 5.0 |
-| `vitest` | 5.0 |
-| `@playwright/test` | 1.63 |
+| Frontend                                   | Version |
+| ------------------------------------------ | ------- |
+| `@tauri-apps/api` / `@tauri-apps/cli`      | 2.11    |
+| `react`                                    | 19.3    |
+| `vite`                                     | 8.3     |
+| `tailwindcss` + `@tailwindcss/vite`        | 4.3     |
+| `@tiptap/react`                            | 3.31    |
+| `codemirror` + `@codemirror/lang-markdown` | 6.x     |
+| `zustand`                                  | 5.0     |
+| `vitest`                                   | 5.0     |
+| `@playwright/test`                         | 1.63    |
 
 > **Tailwind 4 note:** CSS-first config. `@import "tailwindcss";` in `src/styles.css` plus the
 > `@tailwindcss/vite` plugin. There is **no** `tailwind.config.js` and no PostCSS step. An agent
@@ -170,13 +170,13 @@ Verified against the registries on 2026-09-10. Pin these; do not float.
 - [ ] Initial commit exists; `.gitignore` covers `target/`, `node_modules/`, `dist/`.
 - [ ] CI runs `just ci` on push.
 
-| # | Task | Owns | Mode |
-|---|---|---|---|
-| 0.1 | Cargo workspace, `rust-toolchain.toml`, skeletons for `mdcore`/`mdcli`, `src-tauri` (scaffold with `create-tauri-app`, then restructure) | `Cargo.toml`, `crates/**`, `src-tauri/**` | serial |
-| 0.2 | Frontend: Vite 8 + React 19 + TS strict + Tailwind 4 + Zustand; placeholder two-pane shell | `package.json`, `vite.config.ts`, `src/**` | parallel |
-| 0.3 | The `justfile` (below) | `justfile` | parallel |
-| 0.4 | `.github/workflows/ci.yml` running `just ci` on `windows-latest` | `.github/**` | parallel |
-| 0.5 | `AGENTS.md` | `AGENTS.md` | parallel |
+| #   | Task                                                                                                                                     | Owns                                       | Mode     |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | -------- |
+| 0.1 | Cargo workspace, `rust-toolchain.toml`, skeletons for `mdcore`/`mdcli`, `src-tauri` (scaffold with `create-tauri-app`, then restructure) | `Cargo.toml`, `crates/**`, `src-tauri/**`  | serial   |
+| 0.2 | Frontend: Vite 8 + React 19 + TS strict + Tailwind 4 + Zustand; placeholder two-pane shell                                               | `package.json`, `vite.config.ts`, `src/**` | parallel |
+| 0.3 | The `justfile` (below)                                                                                                                   | `justfile`                                 | parallel |
+| 0.4 | `.github/workflows/ci.yml` running `just ci` on `windows-latest`                                                                         | `.github/**`                               | parallel |
+| 0.5 | `AGENTS.md`                                                                                                                              | `AGENTS.md`                                | parallel |
 
 ### Identity (task 0.1) — copy these values verbatim
 
@@ -297,7 +297,7 @@ rich-HTML read**, so it cannot do this app's primary job.
 **Resolved (ADR 0001): use `clipboard-win` 5.4 directly.** Reading its source settled it — it
 already provides `raw::get_html` (header stripped), `raw::set_html` (header written correctly),
 `raw::EnumFormats` + `format_name_big` for the spike's format enumeration, and
-`raw::set_without_clear`, which is what lets "Copy for Teams" write HTML *and* a plain-text fallback
+`raw::set_without_clear`, which is what lets "Copy for Teams" write HTML _and_ a plain-text fallback
 in a single open/empty/write session. Writing the two representations in separate open/close cycles
 would leave only the last on the clipboard — the exact bug this app cannot afford.
 
@@ -323,14 +323,14 @@ gets its own unit tests with byte-exact expected output and an `encode(decode(x)
 
 ### Task table
 
-| # | Task | Owns | Mode |
-|---|---|---|---|
-| 1.1 | `cf_html.rs`: encode/decode + byte-exact unit tests | `src-tauri/src/clipboard/cf_html.rs` | parallel |
-| 1.2 | `mdcli dump-clipboard` + `capture`, using `clipboard-win` raw enumeration | `crates/mdcli/**` | parallel |
-| 1.3 | ~~Evaluate `tauri-plugin-clipboard`~~ — **done**, see ADR 0001: use `clipboard-win` directly | `docs/adr/0001-*.md` | ✅ |
-| 1.4 | **Capture matrix** from Teams **Desktop** and Teams **Web** | `tests/fixtures/**` | serial, needs 1.2 |
-| 1.5 | **Paste-back matrix**: put candidate HTML on the clipboard, paste into Teams, record what survives | `docs/clipboard-findings.md` | serial, needs 1.1 |
-| 1.6 | Derive initial `RenderProfile` defaults from 1.5 | `crates/mdcore/src/profile.rs` | serial |
+| #   | Task                                                                                               | Owns                                 | Mode              |
+| --- | -------------------------------------------------------------------------------------------------- | ------------------------------------ | ----------------- |
+| 1.1 | `cf_html.rs`: encode/decode + byte-exact unit tests                                                | `src-tauri/src/clipboard/cf_html.rs` | parallel          |
+| 1.2 | `mdcli dump-clipboard` + `capture`, using `clipboard-win` raw enumeration                          | `crates/mdcli/**`                    | parallel          |
+| 1.3 | ~~Evaluate `tauri-plugin-clipboard`~~ — **done**, see ADR 0001: use `clipboard-win` directly       | `docs/adr/0001-*.md`                 | ✅                |
+| 1.4 | **Capture matrix** from Teams **Desktop** and Teams **Web**                                        | `tests/fixtures/**`                  | serial, needs 1.2 |
+| 1.5 | **Paste-back matrix**: put candidate HTML on the clipboard, paste into Teams, record what survives | `docs/clipboard-findings.md`         | serial, needs 1.1 |
+| 1.6 | Derive initial `RenderProfile` defaults from 1.5                                                   | `crates/mdcore/src/profile.rs`       | serial            |
 
 ### Capture matrix (run for Desktop **and** Web)
 
@@ -345,34 +345,40 @@ For each: record which formats appeared, and save the HTML verbatim as a fixture
 
 For each construct, try the candidates and record **exactly one winner**:
 
-| Construct | Candidates to try |
-|---|---|
-| Bold | `<strong>` · `<b>` · `<span style="font-weight:bold">` |
-| Heading | `<h2>` · `<p><strong>` fallback |
-| Nested list | native `<ul><li><ul>` · `style="margin-left"` |
-| Code block | `<pre><code>` · `<div style="font-family:monospace">` |
-| Blockquote | `<blockquote>` · `> ` prefixed text |
-| Link | `<a href>` · bare URL |
+| Construct   | Candidates to try                                      |
+| ----------- | ------------------------------------------------------ |
+| Bold        | `<strong>` · `<b>` · `<span style="font-weight:bold">` |
+| Heading     | `<h2>` · `<p><strong>` fallback                        |
+| Nested list | native `<ul><li><ul>` · `style="margin-left"`          |
+| Code block  | `<pre><code>` · `<div style="font-family:monospace">`  |
+| Blockquote  | `<blockquote>` · `> ` prefixed text                    |
+| Link        | `<a href>` · bare URL                                  |
 
 ### `docs/clipboard-findings.md` template
 
 ```markdown
 # Clipboard findings
+
 Teams Desktop version: … | Teams Web (browser + version): … | Windows build: … | Date: …
 
 ## Formats observed on copy
+
 | Format | Present (Desktop) | Present (Web) | Notes |
 
 ## Per-construct capture results
+
 | Construct | HTML Teams emits | Lossless? | Fixture |
 
 ## Paste-back results
+
 | Construct | Encoding that survives | Encodings that fail | Notes |
 
 ## Consequences for RenderProfile
+
 …
 
 ## Open questions / Desktop-vs-Web divergence
+
 …
 ```
 
@@ -449,20 +455,20 @@ write_clipboard(payload: OutboundPayload) -> Result<(), ClipError> // html + tex
 
 `Format` is `{ Markdown, Html, Text }`. `ClipboardPayload.kind` drives the "Pasted rich text" /
 "Pasted plain text" toast. Every command returns `Result`; every error type implements `Serialize`;
-every command is registered in `generate_handler![]` — an unregistered command fails *silently* at
+every command is registered in `generate_handler![]` — an unregistered command fails _silently_ at
 runtime and costs an hour to diagnose.
 
 ### 2.3 (parallel) — workstreams
 
-| # | Task | Owns |
-|---|---|---|
-| 2.3a | `markdown/parse.rs` — pulldown-cmark (GFM strikethrough on) -> AST | `markdown/parse.rs` |
+| #    | Task                                                                      | Owns                              |
+| ---- | ------------------------------------------------------------------------- | --------------------------------- |
+| 2.3a | `markdown/parse.rs` — pulldown-cmark (GFM strikethrough on) -> AST        | `markdown/parse.rs`               |
 | 2.3b | `markdown/render.rs` + `escape.rs` — AST -> Markdown, contextual escaping | `markdown/render.rs`, `escape.rs` |
-| 2.3c | `html/parse.rs` + `styles.rs` — html5ever -> AST, style inference | `html/parse.rs`, `styles.rs` |
-| 2.3d | `html/render.rs` + `profile.rs` — AST -> HTML under a `RenderProfile` | `html/render.rs`, `profile.rs` |
-| 2.3e | `text/` — plain text <-> AST | `text/**` |
-| 2.3f | `document/normalize.rs` — the invariant passes above | `normalize.rs` |
-| 2.3g | Test harness: `tests/corpus.rs` runner + `tests/roundtrip.rs` proptests | `crates/mdcore/tests/**` |
+| 2.3c | `html/parse.rs` + `styles.rs` — html5ever -> AST, style inference         | `html/parse.rs`, `styles.rs`      |
+| 2.3d | `html/render.rs` + `profile.rs` — AST -> HTML under a `RenderProfile`     | `html/render.rs`, `profile.rs`    |
+| 2.3e | `text/` — plain text <-> AST                                              | `text/**`                         |
+| 2.3f | `document/normalize.rs` — the invariant passes above                      | `normalize.rs`                    |
+| 2.3g | Test harness: `tests/corpus.rs` runner + `tests/roundtrip.rs` proptests   | `crates/mdcore/tests/**`          |
 
 Build **2.3g first**. The corpus runner is what lets every other workstream verify itself.
 
@@ -475,31 +481,34 @@ Prefer over-escaping when unsure, and add a fixture.
 
 **Style inference (2.3c)** is where Teams markup is normalized to intent, per `plan.md`:
 
-| Signal | Becomes |
-|---|---|
-| `<b>`, `<strong>`, `font-weight` >= 600 or `bold`/`bolder` | `Bold` |
-| `<i>`, `<em>`, `font-style: italic\|oblique` | `Italic` |
-| `<s>`, `<del>`, `<strike>`, `text-decoration` containing `line-through` | `Strike` |
-| `<code>`, `<tt>`, monospace `font-family` | `Code` |
-| `<div>`, `<p>` | `Paragraph` |
-| `<br>` | `HardBreak` |
-| `font-weight: normal` on a descendant of a bold run | **removes** the mark |
+| Signal                                                                  | Becomes              |
+| ----------------------------------------------------------------------- | -------------------- |
+| `<b>`, `<strong>`, `font-weight` >= 600 or `bold`/`bolder`              | `Bold`               |
+| `<i>`, `<em>`, `font-style: italic\|oblique`                            | `Italic`             |
+| `<s>`, `<del>`, `<strike>`, `text-decoration` containing `line-through` | `Strike`             |
+| `<code>`, `<tt>`, monospace `font-family`                               | `Code`               |
+| `<div>`, `<p>`                                                          | `Paragraph`          |
+| `<br>`                                                                  | `HardBreak`          |
+| `font-weight: normal` on a descendant of a bold run                     | **removes** the mark |
 
 Collapse HTML whitespace per the HTML rules (runs of whitespace -> one space; leading/trailing in a
 block dropped) **except** inside `<pre>`. Run `ammonia` before parsing — clipboard HTML is untrusted
 input from another process.
 
 **`RenderProfile` (2.3d)** is the mechanism that makes Phase 4 cheap. The Teams dialect is expressed
-as *data*, so tuning fidelity means editing a struct literal, not rewriting a renderer:
+as _data_, so tuning fidelity means editing a struct literal, not rewriting a renderer:
 
 ```rust
 pub struct RenderProfile {
     pub bold: MarkStyle,               // Tag("strong") | Tag("b") | Style("font-weight:bold")
+    pub italic: MarkStyle,
+    pub strike: MarkStyle,
+    pub code: MarkStyle,
     pub headings: HeadingStrategy,     // Native | BoldParagraph
     pub code_block: CodeBlockStrategy, // PreCode | MonospaceDiv
     pub nested_lists: NestingStrategy, // Native | MarginIndent
-    pub blockquote: QuoteStrategy,
-    pub hard_break: BreakStrategy,
+    pub blockquote: QuoteStrategy,     // Blockquote | TextPrefix
+    pub pretty: bool,                  // newlines between blocks; off for clipboard payloads
 }
 
 impl RenderProfile {
@@ -507,6 +516,18 @@ impl RenderProfile {
     pub fn standard() -> Self;  // plain semantic HTML
 }
 ```
+
+Two gaps to be aware of when Phase 4 tunes this, neither of which blocks the MVP:
+
+- **`<br>` is hard-coded.** There is no `hard_break: BreakStrategy` field. Add one only if the spike
+  shows Teams wants something other than `<br>`.
+- **`MarkStyle::Style` renders as `<span style="…">`.** A profile wanting a _styled semantic tag_
+  (`<b style="font-weight:600">`) needs a third `MarkStyle` variant.
+
+Known lossy edges, documented in the code: `SoftBreak` cannot survive an HTML round trip (HTML has
+no way to say "a newline that renders as a space"), `Unsupported` degrades to a plain paragraph by
+definition, and `NestingStrategy::MarginIndent` turns a nested list into a sibling, so an
+interrupted ordered list restarts its numbering.
 
 ### Fixture format (2.3g) — as built
 
@@ -541,16 +562,16 @@ reaching a fixpoint in one pass.
 **Goal:** the one-screen two-pane app from `plan.md`, with live conversion and the three copy
 actions. Depends on Phase 2's command surface (2.2); can start against the `todo!()` stubs.
 
-| # | Task | Owns | Mode |
-|---|---|---|---|
-| 3.1 | Zustand store + the sync engine (below) | `src/stores/**`, `src/lib/**` | serial |
-| 3.2 | `MarkdownEditor` — CodeMirror 6, markdown mode, monospace, no line numbers | `components/MarkdownEditor/**` | parallel |
-| 3.3 | `RichEditor` — TipTap 3, marks restricted to the AST's inline set | `components/RichEditor/**` | parallel |
-| 3.4 | `CopyActions` — Copy for Teams · Copy Markdown · Copy Text | `components/CopyActions/**` | parallel |
-| 3.5 | `StatusToast` — transient "Pasted rich text" / "Copied" | `components/StatusToast/**` | parallel |
-| 3.6 | Paste interception on the Formatted pane -> `read_clipboard` -> convert | `components/RichEditor/paste.ts` | serial, needs 3.1 |
-| 3.7 | Wire the real clipboard commands per ADR 0001; permissions in `capabilities/default.json` | `src-tauri/**` | parallel |
-| 3.8 | Playwright functional suite (below) | `playwright.config.ts`, `e2e/**` | serial, needs 3.1–3.6 |
+| #   | Task                                                                                      | Owns                             | Mode                  |
+| --- | ----------------------------------------------------------------------------------------- | -------------------------------- | --------------------- |
+| 3.1 | Zustand store + the sync engine (below)                                                   | `src/stores/**`, `src/lib/**`    | serial                |
+| 3.2 | `MarkdownEditor` — CodeMirror 6, markdown mode, monospace, no line numbers                | `components/MarkdownEditor/**`   | parallel              |
+| 3.3 | `RichEditor` — TipTap 3, marks restricted to the AST's inline set                         | `components/RichEditor/**`       | parallel              |
+| 3.4 | `CopyActions` — Copy for Teams · Copy Markdown · Copy Text                                | `components/CopyActions/**`      | parallel              |
+| 3.5 | `StatusToast` — transient "Pasted rich text" / "Copied"                                   | `components/StatusToast/**`      | parallel              |
+| 3.6 | Paste interception on the Formatted pane -> `read_clipboard` -> convert                   | `components/RichEditor/paste.ts` | serial, needs 3.1     |
+| 3.7 | Wire the real clipboard commands per ADR 0001; permissions in `capabilities/default.json` | `src-tauri/**`                   | parallel              |
+| 3.8 | Playwright functional suite (below)                                                       | `playwright.config.ts`, `e2e/**` | serial, needs 3.1–3.6 |
 
 ### Functional tests (3.8) — how Playwright reaches a Tauri app
 
@@ -565,7 +586,7 @@ overridable with `?backend=mock`:
   `cargo run -p mdcli -- export-fixtures` (`just oracle`, which `just test-e2e` depends on, and
   which CI regenerates so the table can never drift from the engine).
 
-So the E2E suite exercises the real UI against real conversions, while conversion *correctness*
+So the E2E suite exercises the real UI against real conversions, while conversion _correctness_
 stays covered exhaustively by the Rust corpus. What Playwright is actually there to catch is the
 class of bug unit tests cannot reach: caret theft, sync loops, stale async responses landing out of
 order, copy actions wiring the wrong payload, and layout breaking at small window sizes.
@@ -575,7 +596,7 @@ order, copy actions wiring the wrong payload, and layout breaking at small windo
 Two editors that each regenerate the other will loop, fight over the caret, and corrupt input. Three
 rules prevent all of it:
 
-1. **Single authority.** The focused pane owns the document. The other pane is *derived* and is
+1. **Single authority.** The focused pane owns the document. The other pane is _derived_ and is
    never converted back while unfocused. Track `owner: 'markdown' | 'rich'`, set on focus.
 2. **Suppressed echo.** When applying a derived update to a pane, set a flag so that pane's
    `onChange` does not re-enter the conversion pipeline.
@@ -618,22 +639,22 @@ marks -> hard breaks -> mixed inline marks.
 - [ ] Every fix has a fixture; `just test-core` green.
 - [ ] `clipboard-findings.md` updated with the final profile rationale.
 
-*Manual verification required. An agent cannot confirm this phase alone and must say so.*
+_Manual verification required. An agent cannot confirm this phase alone and must say so._
 
 ---
 
 ## Phase 5 — Polish
 
-| # | Task | Owns |
-|---|---|---|
-| 5.1 | Light / dark / system themes via CSS custom properties; follow the OS by default | `src/styles.css`, `stores/theme.ts` |
-| 5.2 | Keyboard shortcuts: Ctrl+1/2 focus pane, Ctrl+Shift+C copy for Teams, Ctrl+B/I/K in the rich pane | `src/lib/shortcuts.ts` |
-| 5.3 | Draggable pane divider with a persisted ratio | `components/SplitPane/**` |
-| 5.4 | Floating selection toolbar (B I S `</>` Link) — **no permanent toolbar** | `components/RichEditor/BubbleMenu.tsx` |
-| 5.5 | Responsive single-pane mode with a toggle below ~700 px | `App.tsx` |
-| 5.6 | Preferences via `tauri-plugin-store`: theme, split ratio, window size | `src-tauri/**`, `stores/prefs.ts` |
-| 5.7 | Undo/redo coherent across both panes | `stores/**` |
-| 5.8 | Empty state, app icon, About | assets |
+| #   | Task                                                                                              | Owns                                   |
+| --- | ------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| 5.1 | Light / dark / system themes via CSS custom properties; follow the OS by default                  | `src/styles.css`, `stores/theme.ts`    |
+| 5.2 | Keyboard shortcuts: Ctrl+1/2 focus pane, Ctrl+Shift+C copy for Teams, Ctrl+B/I/K in the rich pane | `src/lib/shortcuts.ts`                 |
+| 5.3 | Draggable pane divider with a persisted ratio                                                     | `components/SplitPane/**`              |
+| 5.4 | Floating selection toolbar (B I S `</>` Link) — **no permanent toolbar**                          | `components/RichEditor/BubbleMenu.tsx` |
+| 5.5 | Responsive single-pane mode with a toggle below ~700 px                                           | `App.tsx`                              |
+| 5.6 | Preferences via `tauri-plugin-store`: theme, split ratio, window size                             | `src-tauri/**`, `stores/prefs.ts`      |
+| 5.7 | Undo/redo coherent across both panes                                                              | `stores/**`                            |
+| 5.8 | Empty state, app icon, About                                                                      | assets                                 |
 
 **Exit criteria:** all of the above work; `just build` ships an installer that runs on a clean
 machine; no console errors in the release build.
@@ -651,15 +672,15 @@ a WASM build of `mdcore` for a browser version · auto-update.
 
 ## Risk register
 
-| Risk | Phase | Mitigation |
-|---|---|---|
-| Teams emits poor HTML, or accepts almost nothing on paste | 1 | Exactly why Phase 1 is a gate. If it fails, the fallback is plain-Markdown-on-clipboard and the app becomes Teams->Markdown only — still useful, and the architecture is unchanged. |
-| `tauri-plugin-clipboard` cannot read HTML faithfully | 1 | The `clipboard-win` fallback is already the spike tool; ADR 0001 records the call. |
-| CF_HTML offsets wrong -> blank pastes | 1 | Byte-exact round-trip unit tests before anything depends on it. |
-| Two-editor sync loop / caret theft | 3 | Authority + echo suppression + seq guard, specified in 3.1. |
-| Markdown escaping bugs producing silently wrong output | 2 | Dedicated `escape.rs`, proptest round trips, over-escape-when-unsure rule. |
-| Teams Desktop and Web diverge | 4 | The capture matrix runs against both; `RenderProfile` can carry a per-target variant. |
-| Scope creep into Teams APIs / message sending | all | `plan.md` excludes it explicitly; Phase 6 is the holding pen. |
+| Risk                                                      | Phase | Mitigation                                                                                                                                                                          |
+| --------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Teams emits poor HTML, or accepts almost nothing on paste | 1     | Exactly why Phase 1 is a gate. If it fails, the fallback is plain-Markdown-on-clipboard and the app becomes Teams->Markdown only — still useful, and the architecture is unchanged. |
+| `tauri-plugin-clipboard` cannot read HTML faithfully      | 1     | The `clipboard-win` fallback is already the spike tool; ADR 0001 records the call.                                                                                                  |
+| CF_HTML offsets wrong -> blank pastes                     | 1     | Byte-exact round-trip unit tests before anything depends on it.                                                                                                                     |
+| Two-editor sync loop / caret theft                        | 3     | Authority + echo suppression + seq guard, specified in 3.1.                                                                                                                         |
+| Markdown escaping bugs producing silently wrong output    | 2     | Dedicated `escape.rs`, proptest round trips, over-escape-when-unsure rule.                                                                                                          |
+| Teams Desktop and Web diverge                             | 4     | The capture matrix runs against both; `RenderProfile` can carry a per-target variant.                                                                                               |
+| Scope creep into Teams APIs / message sending             | all   | `plan.md` excludes it explicitly; Phase 6 is the holding pen.                                                                                                                       |
 
 ## Suggested sequencing
 

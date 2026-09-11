@@ -1,1 +1,1 @@
-[docs](https://example.com "The Docs")
+[docs](https://example.com 'The Docs')

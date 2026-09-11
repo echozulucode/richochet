@@ -1,11 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
-import type {
-  ClipboardPayload,
-  ConversionBackend,
-  OutboundPayload,
-  WireFormat,
-} from '../types';
+import type { ClipboardPayload, ConversionBackend, OutboundPayload, WireFormat } from '../types';
 
 /**
  * The real backend: three commands from the frozen surface in `src-tauri/src/commands.rs`.

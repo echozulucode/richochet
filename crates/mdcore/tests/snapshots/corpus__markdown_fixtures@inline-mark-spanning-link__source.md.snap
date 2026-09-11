@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/inline-mark-spanning-link/source.md
+---
+=== markdown ===
+[**bold link**](https://x.test)
+
+=== teams html ===
+<p><a href="https://x.test"><strong>bold link</strong></a></p>
+
+=== plain text ===
+bold link

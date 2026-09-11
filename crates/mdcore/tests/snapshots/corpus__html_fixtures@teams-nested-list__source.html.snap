@@ -1,0 +1,24 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-nested-list/source.html
+---
+=== markdown ===
+- Outer
+  - Inner
+- Outer two
+
+=== teams html ===
+<ul>
+<li>Outer
+<ul>
+<li>Inner</li>
+</ul>
+</li>
+<li>Outer two</li>
+</ul>
+
+=== plain text ===
+• Outer
+  • Inner
+• Outer two

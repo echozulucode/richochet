@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-font-weight-normal/source.html
+---
+=== markdown ===
+**bold** but not this
+
+=== teams html ===
+<p><strong>bold</strong> but not this</p>
+
+=== plain text ===
+bold but not this

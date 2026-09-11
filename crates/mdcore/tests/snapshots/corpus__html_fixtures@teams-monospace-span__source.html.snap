@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-monospace-span/source.html
+---
+=== markdown ===
+run `cargo test`
+
+=== teams html ===
+<p>run <code>cargo test</code></p>
+
+=== plain text ===
+run cargo test

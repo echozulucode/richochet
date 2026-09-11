@@ -3,7 +3,7 @@
 Working agreement for agents on **Richochet** — a Tauri 2 desktop app that converts between
 Microsoft Teams rich clipboard content and Markdown.
 
-> **The name is `Richochet`** — "rich text" + *ricochet*, content bouncing between formats. The `h`
+> **The name is `Richochet`** — "rich text" + _ricochet_, content bouncing between formats. The `h`
 > after `Ric` is deliberate. It is **not** a typo: never write `Ricochet` in code, config, commits,
 > docs or UI copy, and never "fix" it if you see it. Bundle id `com.echozed.richochet`.
 
@@ -17,21 +17,21 @@ Microsoft Teams rich clipboard content and Markdown.
 `just` is the only entry point. Do not invoke `cargo`/`pnpm` directly in a report, a script, or CI;
 if a command you need is missing, add a recipe to the `justfile` rather than working around it.
 
-| Command | What it does |
-|---|---|
-| `just` | list all recipes |
-| `just setup` | one-time install of JS deps + cargo tooling |
-| `just dev` | run the app with hot reload |
-| `just build` | release bundle |
-| `just check` | clippy `-D warnings` + `tsc --noEmit` + eslint |
-| `just test` | full suite |
-| `just test-core` | engine tests only — fast, no Tauri. **Your inner loop.** |
-| `just review` | review pending `insta` snapshot changes |
-| `just fmt` | format Rust + TS |
-| `just ci` | exactly what CI runs (`check` + `test`) |
+| Command                   | What it does                                                    |
+| ------------------------- | --------------------------------------------------------------- |
+| `just`                    | list all recipes                                                |
+| `just setup`              | one-time install of JS deps + cargo tooling                     |
+| `just dev`                | run the app with hot reload                                     |
+| `just build`              | release bundle                                                  |
+| `just check`              | clippy `-D warnings` + `tsc --noEmit` + eslint                  |
+| `just test`               | full suite                                                      |
+| `just test-core`          | engine tests only — fast, no Tauri. **Your inner loop.**        |
+| `just review`             | review pending `insta` snapshot changes                         |
+| `just fmt`                | format Rust + TS                                                |
+| `just ci`                 | exactly what CI runs (`check` + `test`)                         |
 | `just conv <mode> <file>` | convert on the command line, e.g. `just conv md2teams notes.md` |
-| `just clipdump` | dump every format on the clipboard |
-| `just capture <name>` | save the clipboard into `tests/fixtures/<name>/` |
+| `just clipdump`           | dump every format on the clipboard                              |
+| `just capture <name>`     | save the clipboard into `tests/fixtures/<name>/`                |
 
 ## Architecture in one paragraph
 
@@ -93,12 +93,12 @@ dependency**; `src-tauri` is a thin shell that owns the clipboard and the comman
 Four layers, each catching what the others can't. Put a test at the lowest layer that can catch the
 bug.
 
-| Layer | Where | Catches |
-|---|---|---|
-| Unit | inline `#[cfg(test)]` / `*.test.ts` | logic inside one module |
-| Corpus | `tests/fixtures/` + `crates/mdcore/tests/corpus.rs` | conversion output, per construct |
-| Property | `crates/mdcore/tests/roundtrip.rs` | the *rules* — round trips, idempotence, escaping |
-| Functional | `e2e/*.spec.ts` (Playwright) | caret theft, sync loops, stale responses, copy wiring, layout |
+| Layer      | Where                                               | Catches                                                       |
+| ---------- | --------------------------------------------------- | ------------------------------------------------------------- |
+| Unit       | inline `#[cfg(test)]` / `*.test.ts`                 | logic inside one module                                       |
+| Corpus     | `tests/fixtures/` + `crates/mdcore/tests/corpus.rs` | conversion output, per construct                              |
+| Property   | `crates/mdcore/tests/roundtrip.rs`                  | the _rules_ — round trips, idempotence, escaping              |
+| Functional | `e2e/*.spec.ts` (Playwright)                        | caret theft, sync loops, stale responses, copy wiring, layout |
 
 **Adding a fixture** — create `tests/fixtures/<name>/` with a `source.md`, `source.html` and/or
 `source.txt`, plus a `notes.md` saying where it came from and what it proves (a test enforces the

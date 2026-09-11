@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/inline-strike/source.md
+---
+=== markdown ===
+~~gone~~
+
+=== teams html ===
+<p><s>gone</s></p>
+
+=== plain text ===
+gone

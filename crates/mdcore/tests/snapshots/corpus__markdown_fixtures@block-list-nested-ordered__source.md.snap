@@ -1,0 +1,24 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-list-nested-ordered/source.md
+---
+=== markdown ===
+1. Outer
+   1. Inner
+2. Outer two
+
+=== teams html ===
+<ol>
+<li>Outer
+<ol>
+<li>Inner</li>
+</ol>
+</li>
+<li>Outer two</li>
+</ol>
+
+=== plain text ===
+1. Outer
+   1. Inner
+2. Outer two

@@ -286,8 +286,8 @@ teams-markdown/
 
 The **clipboard spike should be the very first implementation task**. If Teams provides good HTML on copy and accepts well-formed HTML on paste, this application will be quite straightforward. If it doesn't, you'll discover that before investing in the editor or conversion architecture. The rest of the design can remain essentially the same either way.
 
-[1]: https://support.microsoft.com/en-us/teams/chat/use-markdown-formatting-in-microsoft-teams?utm_source=chatgpt.com "Use Markdown formatting in Microsoft Teams | Microsoft Support"
-[2]: https://tauri.app/reference/javascript/clipboard-manager/?utm_source=chatgpt.com "@tauri-apps/plugin-clipboard-manager | Tauri"
-[3]: https://v2.tauri.app/plugin/?utm_source=chatgpt.com "Features & Recipes | Tauri"
-[4]: https://support.microsoft.com/en-us/teams/chat/copy-and-paste-text-in-microsoft-teams?utm_source=chatgpt.com "Copy and paste text in Microsoft Teams | Microsoft Support"
-[5]: https://support.microsoft.com/en-us/teams/chat/use-code-blocks-in-microsoft-teams?utm_source=chatgpt.com "Use code blocks in Microsoft Teams | Microsoft Support"
+[1]: https://support.microsoft.com/en-us/teams/chat/use-markdown-formatting-in-microsoft-teams?utm_source=chatgpt.com 'Use Markdown formatting in Microsoft Teams | Microsoft Support'
+[2]: https://tauri.app/reference/javascript/clipboard-manager/?utm_source=chatgpt.com '@tauri-apps/plugin-clipboard-manager | Tauri'
+[3]: https://v2.tauri.app/plugin/?utm_source=chatgpt.com 'Features & Recipes | Tauri'
+[4]: https://support.microsoft.com/en-us/teams/chat/copy-and-paste-text-in-microsoft-teams?utm_source=chatgpt.com 'Copy and paste text in Microsoft Teams | Microsoft Support'
+[5]: https://support.microsoft.com/en-us/teams/chat/use-code-blocks-in-microsoft-teams?utm_source=chatgpt.com 'Use code blocks in Microsoft Teams | Microsoft Support'

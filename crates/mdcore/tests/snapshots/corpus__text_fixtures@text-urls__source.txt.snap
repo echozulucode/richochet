@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Text)"
+input_file: tests/fixtures/text-urls/source.txt
+---
+=== markdown ===
+See https://example.com/a_b_c for details
+
+=== teams html ===
+<p>See https://example.com/a_b_c for details</p>
+
+=== plain text ===
+See https://example.com/a_b_c for details

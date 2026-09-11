@@ -1,0 +1,13 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc badceb3c8861c40f008b055863d677fbc209b2fa5da3a0caafd9d74fccd22e05 # shrinks to doc = Document { blocks: [BlockQuote([BlockQuote([Paragraph([SoftBreak])])])] }
+cc 2b4f910142cc782f0e729d570049ad70ca6c2246e588aad12f06a0fe350531c7 # shrinks to doc = Document { blocks: [Paragraph([Bold([SoftBreak])])] }
+cc 9b32993c7212dc933e3a74b12b3a481f9e84529b2c7da0a94c1fd190d7f0439a # shrinks to doc = Document { blocks: [BlockQuote([Paragraph([Italic([SoftBreak])])])] }
+cc e8cc376c67016c302e439221801cd7cd5b7ca4011191a0ddd87c13693992b730 # shrinks to doc = Document { blocks: [BlockQuote([Paragraph([Bold([SoftBreak])])])] }
+cc 961122ba79c89268943ece112d825de5ec8f90a7349139495885cdc394d5dc8b # shrinks to doc = Document { blocks: [List(List { ordered: false, start: 1, tight: true, items: [ListItem { blocks: [List(List { ordered: false, start: 1, tight: true, items: [ListItem { blocks: [Paragraph([Text("plain")])] }, ListItem { blocks: [ThematicBreak] }] })] }, ListItem { blocks: [Paragraph([Bold([Text("plain")])])] }] })] }
+cc 44bdf2adfc3eca57aaa2cd8129b728eed57772a040f41cb8636ee0cc9ebc6c0b # shrinks to doc = Document { blocks: [List(List { ordered: false, start: 1, tight: true, items: [ListItem { blocks: [List(List { ordered: false, start: 1, tight: true, items: [ListItem { blocks: [Paragraph([Bold([Text("plain")])])] }, ListItem { blocks: [ThematicBreak] }] })] }, ListItem { blocks: [Paragraph([Text("plain")])] }] })] }
+cc 7fcfc96e8442160e33e407a33282e44c4ef0df9d8452c82c3317b4fa103f102d # shrinks to doc = Document { blocks: [BlockQuote([Paragraph([Strike([Text("plain"), Link { href: "https://example.com/p", title: None, content: [Bold([Text("plain")])] }]), Bold([Text("plain")])])])] }

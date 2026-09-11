@@ -1,0 +1,21 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-list-loose/source.md
+---
+=== markdown ===
+- one
+
+- two
+
+=== teams html ===
+<ul>
+<li><p>one</p>
+</li>
+<li><p>two</p>
+</li>
+</ul>
+
+=== plain text ===
+• one
+• two

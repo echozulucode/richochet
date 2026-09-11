@@ -1,0 +1,18 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-unsafe/source.html
+---
+=== markdown ===
+safe
+
+also safe
+
+=== teams html ===
+<p>safe</p>
+<p>also safe</p>
+
+=== plain text ===
+safe
+
+also safe

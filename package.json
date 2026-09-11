@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Richochet — Teams rich text and Markdown, bouncing between formats.",
+  "description": "Richochet \u2014 Teams rich text and Markdown, bouncing between formats.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
@@ -11,7 +11,9 @@
     "test": "vitest run",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:e2e": "playwright test",
+    "oracle": "cargo run -q -p mdcli -- export-fixtures --out src/test-support/oracle.json"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "6.5.2",
@@ -29,11 +31,13 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "4.3.3",
     "@tauri-apps/cli": "2.11.4",
     "@testing-library/dom": "10.4.1",
     "@testing-library/jest-dom": "7.0.1",
     "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.7",
     "@types/node": "22.20.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

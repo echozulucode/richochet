@@ -44,9 +44,14 @@ fn assert_idempotent(input: &str, from: Format) {
     );
 }
 
+/// The corpus root, resolved from this crate's manifest directory.
+fn fixtures() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures")
+}
+
 #[test]
 fn markdown_fixtures() {
-    insta::glob!("../../../tests/fixtures/*/source.md", |path| {
+    insta::glob!(fixtures(), "*/source.md", |path| {
         let input = std::fs::read_to_string(path).expect("reading fixture");
         assert_idempotent(&input, Format::Markdown);
         insta::assert_snapshot!(report(&input, Format::Markdown));
@@ -55,7 +60,7 @@ fn markdown_fixtures() {
 
 #[test]
 fn html_fixtures() {
-    insta::glob!("../../../tests/fixtures/*/source.html", |path| {
+    insta::glob!(fixtures(), "*/source.html", |path| {
         let input = std::fs::read_to_string(path).expect("reading fixture");
         assert_idempotent(&input, Format::Html);
         insta::assert_snapshot!(report(&input, Format::Html));
@@ -64,7 +69,7 @@ fn html_fixtures() {
 
 #[test]
 fn text_fixtures() {
-    insta::glob!("../../../tests/fixtures/*/source.txt", |path| {
+    insta::glob!(fixtures(), "*/source.txt", |path| {
         let input = std::fs::read_to_string(path).expect("reading fixture");
         assert_idempotent(&input, Format::Text);
         insta::assert_snapshot!(report(&input, Format::Text));
@@ -77,10 +82,7 @@ fn text_fixtures() {
 /// nobody can safely change later.
 #[test]
 fn every_fixture_has_notes() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures")
-        .canonicalize()
-        .expect("fixtures directory");
+    let root = fixtures().canonicalize().expect("fixtures directory");
 
     let mut missing = Vec::new();
     let mut count = 0;

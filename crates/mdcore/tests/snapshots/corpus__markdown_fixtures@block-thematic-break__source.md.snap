@@ -1,0 +1,23 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-thematic-break/source.md
+---
+=== markdown ===
+before
+
+---
+
+after
+
+=== teams html ===
+<p>before</p>
+<hr>
+<p>after</p>
+
+=== plain text ===
+before
+
+---
+
+after

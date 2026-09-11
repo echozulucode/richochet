@@ -1,0 +1,14 @@
+---
+source: crates/mdcore/tests/corpus.rs
+assertion_line: 57
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/inline-mixed/source.md
+---
+=== markdown ===
+**bold *and italic*** plus `code` and [a link](https://x.test)
+
+=== teams html ===
+<p><strong>bold <em>and italic</em></strong> plus <code>code</code> and <a href="https://x.test">a link</a></p>
+
+=== plain text ===
+bold and italic plus code and a link

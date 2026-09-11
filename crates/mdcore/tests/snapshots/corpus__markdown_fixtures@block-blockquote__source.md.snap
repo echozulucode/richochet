@@ -1,0 +1,17 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/block-blockquote/source.md
+---
+=== markdown ===
+> Quoted text
+> across two lines.
+
+=== teams html ===
+<blockquote>
+<p>Quoted text
+across two lines.</p>
+</blockquote>
+
+=== plain text ===
+> Quoted text across two lines.

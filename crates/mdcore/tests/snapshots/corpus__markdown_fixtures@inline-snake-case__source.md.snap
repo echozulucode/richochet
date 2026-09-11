@@ -1,0 +1,13 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/inline-snake-case/source.md
+---
+=== markdown ===
+call update_user_profile(id) now
+
+=== teams html ===
+<p>call update_user_profile(id) now</p>
+
+=== plain text ===
+call update_user_profile(id) now
