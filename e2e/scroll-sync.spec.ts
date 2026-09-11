@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 import {
   openApp,
+  outline,
   scrollRange,
   scrollTop,
   setScrollSample,
@@ -32,6 +33,10 @@ test.describe('synchronized scrolling', () => {
 
     expect(await scrollRange(page, 'markdown')).toBeGreaterThan(100);
     expect(await scrollRange(page, 'rich')).toBeGreaterThan(100);
+
+    // Without this the suite could pass entirely on the proportional fallback and never touch the
+    // feature: one outline entry per top-level block of the sample, from the real engine.
+    expect(await outline(page)).toHaveLength(24);
 
     await wheelOver(page, 'markdown', 600);
 

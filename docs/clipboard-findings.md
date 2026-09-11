@@ -151,16 +151,16 @@ Everything here must be re-confirmed against a real Teams window before it is tr
 
 Captured 2026-09-11 (`tests/fixtures/chromium-rich-message`), 9 clipboard formats:
 
-| Format | Bytes | Note |
-|---|---|---|
-| `HTML Format` | 7223 | the fragment itself is ~1.2 kB; the rest is inlined computed style |
-| `CF_UNICODETEXT` | 1254 | plain-text fallback |
-| `CF_TEXT` / `CF_OEMTEXT` | 627 | ANSI fallbacks |
-| `Chromium internal source URL` | 75 | Chromium-private |
-| `Chromium internal source RFH token` | 24 | Chromium-private |
-| `CanIncludeInClipboardHistory` | 4 | Windows clipboard-history opt-in |
-| `CanUploadToCloudClipboard` | 4 | Windows cloud-clipboard opt-in |
-| `CF_LOCALE` | 4 | |
+| Format                               | Bytes | Note                                                               |
+| ------------------------------------ | ----- | ------------------------------------------------------------------ |
+| `HTML Format`                        | 7223  | the fragment itself is ~1.2 kB; the rest is inlined computed style |
+| `CF_UNICODETEXT`                     | 1254  | plain-text fallback                                                |
+| `CF_TEXT` / `CF_OEMTEXT`             | 627   | ANSI fallbacks                                                     |
+| `Chromium internal source URL`       | 75    | Chromium-private                                                   |
+| `Chromium internal source RFH token` | 24    | Chromium-private                                                   |
+| `CanIncludeInClipboardHistory`       | 4     | Windows clipboard-history opt-in                                   |
+| `CanUploadToCloudClipboard`          | 4     | Windows cloud-clipboard opt-in                                     |
+| `CF_LOCALE`                          | 4     |                                                                    |
 
 What it showed:
 

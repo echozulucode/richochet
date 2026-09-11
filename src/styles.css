@@ -251,9 +251,13 @@ body {
 }
 
 /*
- * CodeMirror hangs the blink off the layer, under `.cm-focused`, so unfocused already does not
- * blink. Saying so outright means a future theme change cannot quietly reintroduce it; the
- * focused rule is three classes deep and still wins.
+ * Belt and braces on the blink, which lives on the layer rather than on the caret.
+ *
+ * CodeMirror applies `animation: steps(1) cm-blink 1.2s infinite` only under `.cm-focused`, so
+ * unfocused does not blink on its own. This says so outright. Note the name and duration also
+ * arrive as an *inline* style, written on every selection change regardless of focus, so they win
+ * over this rule and the property that actually settles it is the iteration count: `infinite`
+ * focused, `1` here. `e2e/caret.spec.ts` asserts on that, not on the animation name.
  */
 .markdown-surface .cm-cursorLayer {
   animation: none;

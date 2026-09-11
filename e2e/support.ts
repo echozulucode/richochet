@@ -81,7 +81,6 @@ export async function settled(page: Page): Promise<void> {
 export type PaneName = 'markdown' | 'rich';
 
 const SCROLLER = { markdown: 'scroller-markdown', rich: 'scroller-rich' } as const;
-const EDITOR = { markdown: 'editor-markdown', rich: 'editor-rich' } as const;
 
 /** A pane's scrolling element. Both are real scrollers with a stable test id. */
 export function scroller(page: Page, pane: PaneName) {
@@ -132,7 +131,8 @@ export async function visibleBlocks(page: Page, pane: PaneName): Promise<number[
       for (const el of document.querySelectorAll<HTMLElement>(sel)) {
         const rect = el.getBoundingClientRect();
         // Anything with pixels inside the viewport counts as visible.
-        if (rect.bottom > view.top + 1 && rect.top < view.bottom - 1) out.push(el.textContent ?? '');
+        if (rect.bottom > view.top + 1 && rect.top < view.bottom - 1)
+          out.push(el.textContent ?? '');
       }
       return out;
     },
@@ -155,14 +155,20 @@ export async function topVisibleBlock(page: Page, pane: PaneName): Promise<numbe
   return blocks[0] ?? null;
 }
 
-/** Wait until an outline response has been applied, so sync is not running on a stale map. */
+/**
+ * Wait until an outline response has been applied, so sync is not running on a stale map.
+ *
+ * A no-op under `?sync=off`, where nothing ever asks for an outline and waiting for one would
+ * hang until the test times out.
+ */
 export async function outlineSettled(page: Page): Promise<void> {
+  if (new URL(page.url()).searchParams.get('sync') === 'off') return;
   await page.waitForFunction(() => (window.__richochet_test?.outlineRevision ?? 0) > 0);
 }
 
-/** Put the caret in a pane without leaving it focused — used by the caret spec. */
-export async function focusPane(page: Page, pane: PaneName): Promise<void> {
-  await page.getByTestId(EDITOR[pane]).click();
+/** The outline the app is currently mapping through. */
+export async function outline(page: Page): Promise<number[]> {
+  return page.evaluate(() => window.__richochet_test?.outlineLines ?? []);
 }
 
 /**
@@ -182,7 +188,8 @@ export async function focusPane(page: Page, pane: PaneName): Promise<void> {
  * Must exist verbatim in `E2E_INPUTS` in `crates/mdcli/src/fixtures.rs`, or the mock answers with
  * a passthrough and no outline.
  */
-export const SCROLL_SAMPLE = '# Block 01 heading\n\nBlock 02 paragraph text.\n\nBlock 03 paragraph text.\n\n```text\nBlock 04 code line 01\nBlock 04 code line 02\nBlock 04 code line 03\nBlock 04 code line 04\nBlock 04 code line 05\nBlock 04 code line 06\nBlock 04 code line 07\nBlock 04 code line 08\nBlock 04 code line 09\nBlock 04 code line 10\nBlock 04 code line 11\nBlock 04 code line 12\n```\n\nBlock 05 paragraph text.\n\nBlock 06 paragraph text.\n\nBlock 07 paragraph text.\n\nBlock 08 paragraph text.\n\nBlock 09 paragraph text.\n\nBlock 10 paragraph text.\n\nBlock 11 paragraph text.\n\nBlock 12 paragraph text.\n\nBlock 13 paragraph text.\n\nBlock 14 paragraph text.\n\nBlock 15 paragraph text.\n\nBlock 16 paragraph text.\n\nBlock 17 paragraph text.\n\nBlock 18 paragraph text.\n\nBlock 19 paragraph text.\n\nBlock 20 paragraph text.\n\nBlock 21 paragraph text.\n\nBlock 22 paragraph text.\n\nBlock 23 paragraph text.\n\nBlock 24 paragraph text.';
+export const SCROLL_SAMPLE =
+  '# Block 01 heading\n\nBlock 02 paragraph text.\n\nBlock 03 paragraph text.\n\n```text\nBlock 04 code line 01\nBlock 04 code line 02\nBlock 04 code line 03\nBlock 04 code line 04\nBlock 04 code line 05\nBlock 04 code line 06\nBlock 04 code line 07\nBlock 04 code line 08\nBlock 04 code line 09\nBlock 04 code line 10\nBlock 04 code line 11\nBlock 04 code line 12\n```\n\nBlock 05 paragraph text.\n\nBlock 06 paragraph text.\n\nBlock 07 paragraph text.\n\nBlock 08 paragraph text.\n\nBlock 09 paragraph text.\n\nBlock 10 paragraph text.\n\nBlock 11 paragraph text.\n\nBlock 12 paragraph text.\n\nBlock 13 paragraph text.\n\nBlock 14 paragraph text.\n\nBlock 15 paragraph text.\n\nBlock 16 paragraph text.\n\nBlock 17 paragraph text.\n\nBlock 18 paragraph text.\n\nBlock 19 paragraph text.\n\nBlock 20 paragraph text.\n\nBlock 21 paragraph text.\n\nBlock 22 paragraph text.\n\nBlock 23 paragraph text.\n\nBlock 24 paragraph text.';
 
 /** Type the sample into the Markdown pane and wait for everything to come to rest. */
 export async function setScrollSample(page: Page): Promise<void> {

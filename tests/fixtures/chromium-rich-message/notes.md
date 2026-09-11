@@ -7,11 +7,11 @@
 
 **This is a proxy, not Teams.** Teams Desktop is a WebView2 app, so its clipboard HTML is
 Chromium's and has this same shape. It does **not** substitute for Phase 1: only a real Teams
-window can say what Teams emits, and nothing here says anything about what Teams *accepts* on
+window can say what Teams emits, and nothing here says anything about what Teams _accepts_ on
 paste.
 
 **What this proves:** the parser survives genuine browser clipboard bytes rather than the tidy
-HTML a human would write. Chromium inlines the *entire computed style* onto every element, so this
+HTML a human would write. Chromium inlines the _entire computed style_ onto every element, so this
 fixture carries `font-style: normal`, `text-decoration-thickness: initial`, explicit `color` and
 `font-family` on nearly every node — exactly the noise that can accidentally cancel a mark. It also
 carries a `SourceURL:` line in the CF_HTML header, which the decoder has to tolerate.

@@ -40,12 +40,13 @@ export interface SyncPane {
    * How many top-level blocks this pane currently renders, or null if it has no independent
    * opinion (the Markdown pane's block count *is* the outline's length, by definition).
    *
-   * The block index is only a shared key while the two panes agree on how many blocks there are.
-   * They can disagree: transiently, because a conversion is still in flight, and permanently,
-   * because the rich editor's schema cannot represent something the engine can — a Markdown table
-   * is one block but renders as one paragraph per row, since the schema has no table node. Acting
-   * on a mismatched index would scroll confidently to the wrong place, which is worse than the
-   * proportional fallback.
+   * The block index is only a shared key while the two panes agree on how many blocks there are,
+   * and they can stop agreeing — transiently, because a conversion is still in flight, or
+   * lastingly, if the AST ever grows a block the rich editor's schema cannot represent as a single
+   * node. That has happened before and will happen again: the fix each time is to add the node,
+   * but scroll sync must not be the thing that breaks while nobody has noticed yet. So the count
+   * is checked rather than assumed, and a mismatch falls back to proportional scrolling — vaguely
+   * right beats confidently wrong, and it fails quietly in the app rather than only in a test.
    */
   blockCount(): number | null;
   /** Where the top of this pane's viewport sits, in block coordinates, or null if unmeasurable. */

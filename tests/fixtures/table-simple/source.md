@@ -1,4 +1,4 @@
-| Component | Status |
-| --- | --- |
-| Engine | Done |
+| Component | Status  |
+| --------- | ------- |
+| Engine    | Done    |
 | Clipboard | Blocked |

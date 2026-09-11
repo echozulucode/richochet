@@ -15,11 +15,29 @@ async function caretState(page: Page) {
       display: style.display,
       width: Number.parseFloat(style.borderLeftWidth),
       color: style.borderLeftColor,
-      // The blink lives on the layer, not the caret itself.
-      animation: layer ? getComputedStyle(layer).animationName : 'none',
+      /*
+       * Whether it blinks. Not `animationName`: CodeMirror writes that (and the duration) onto
+       * the layer as an inline style on every selection change, focused or not, so it says
+       * "cm-blink" in both states. The iteration count is what its focused-only rule actually
+       * changes, and it is the property that decides whether anything moves.
+       */
+      blinks: layer ? getComputedStyle(layer).animationIterationCount === 'infinite' : false,
       height: rect.height,
     };
   });
+}
+
+/**
+ * Move focus to the Formatted pane and wait for CodeMirror to actually let go.
+ *
+ * Reading the caret straight after the click races the blur: the styles are keyed off
+ * `.cm-focused`, so the class going away is the event worth waiting for.
+ */
+async function blurMarkdown(page: Page): Promise<void> {
+  await page.getByTestId('editor-rich').click();
+  await expect(page.locator('[data-testid="pane-markdown"] .cm-editor')).not.toHaveClass(
+    /cm-focused/,
+  );
 }
 
 test.describe('the Markdown caret', () => {
@@ -35,8 +53,7 @@ test.describe('the Markdown caret', () => {
     expect(focused!.display).not.toBe('none');
     expect(focused!.height).toBeGreaterThan(0);
 
-    await page.getByTestId('editor-rich').click();
-    await expect(page.getByTestId('editor-markdown')).not.toBeFocused();
+    await blurMarkdown(page);
 
     const blurred = await caretState(page);
     expect(blurred).not.toBeNull();
@@ -50,7 +67,7 @@ test.describe('the Markdown caret', () => {
     await settled(page);
 
     const focused = await caretState(page);
-    await page.getByTestId('editor-rich').click();
+    await blurMarkdown(page);
     const blurred = await caretState(page);
 
     expect(focused).not.toBeNull();
@@ -64,7 +81,7 @@ test.describe('the Markdown caret', () => {
     expect(blurred!.color).not.toBe(focused!.color);
 
     // And it must not blink at you from a pane you are not typing in.
-    expect(blurred!.animation).toBe('none');
-    expect(focused!.animation).not.toBe('none');
+    expect(blurred!.blinks).toBe(false);
+    expect(focused!.blinks).toBe(true);
   });
 });

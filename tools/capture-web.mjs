@@ -27,9 +27,7 @@ if (!target) {
   process.exit(2);
 }
 
-const url = /^https?:\/\//.test(target)
-  ? target
-  : pathToFileURL(resolve(target)).href;
+const url = /^https?:\/\//.test(target) ? target : pathToFileURL(resolve(target)).href;
 
 if (!/^https?:\/\//.test(target) && !existsSync(resolve(target))) {
   console.error(`no such file: ${target}`);

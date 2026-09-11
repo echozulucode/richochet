@@ -4,11 +4,11 @@ Input data for `crates/mdcore/tests/commonmark.rs`. Everything here is **committ
 test suite must run offline and produce the same result on every machine, so nothing is fetched at
 test time.
 
-| File                           | Source                                                                        | Version                     | Vendored   | Licence                                                              |
-| ------------------------------ | ----------------------------------------------------------------------------- | --------------------------- | ---------- | -------------------------------------------------------------------- |
-| `commonmark-0.31.2.spec.txt`   | <https://spec.commonmark.org/0.31.2/spec.txt>                                 | CommonMark 0.31.2           | 2026-09-10 | CC-BY-SA 4.0, John MacFarlane                                        |
-| `gfm-0.29.spec.txt`            | <https://raw.githubusercontent.com/github/cmark-gfm/master/test/spec.txt>     | GFM 0.29 (dated 2019-04-06) | 2026-09-10 | CC-BY-SA 4.0, GitHub Inc.                                            |
-| `known-divergences.txt`        | ours                                                                          | —                           | —          | —                                                                    |
+| File                         | Source                                                                    | Version                     | Vendored   | Licence                       |
+| ---------------------------- | ------------------------------------------------------------------------- | --------------------------- | ---------- | ----------------------------- |
+| `commonmark-0.31.2.spec.txt` | <https://spec.commonmark.org/0.31.2/spec.txt>                             | CommonMark 0.31.2           | 2026-09-10 | CC-BY-SA 4.0, John MacFarlane |
+| `gfm-0.29.spec.txt`          | <https://raw.githubusercontent.com/github/cmark-gfm/master/test/spec.txt> | GFM 0.29 (dated 2019-04-06) | 2026-09-10 | CC-BY-SA 4.0, GitHub Inc.     |
+| `known-divergences.txt`      | ours                                                                      | —                           | —          | —                             |
 
 Both files are verbatim downloads. They are the machine-readable source the published specs are
 generated from, so the example numbers here are the same ones

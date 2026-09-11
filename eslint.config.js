@@ -20,7 +20,7 @@ export default tseslint.config(
   {
     // Playwright specs are Node files whose `page.evaluate` callbacks run in the browser, so they
     // legitimately reference both global sets.
-    files: ['e2e/**/*.ts', 'playwright.config.ts'],
+    files: ['e2e/**/*.ts', 'playwright.config.ts', 'tools/**/*.mjs'],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
     },
