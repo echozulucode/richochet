@@ -14,7 +14,7 @@
 //! 5. Mark nesting order is canonical.
 //! 6. Heading levels are clamped to `1..=3`.
 
-use crate::document::model::{Block, Document, Inline, List, ListItem, HEADING_MAX};
+use crate::document::model::{Block, Document, Inline, List, ListItem, Row, Table, HEADING_MAX};
 
 /// How many times to re-run the passes before giving up on reaching a fixed point.
 ///
@@ -74,6 +74,11 @@ fn normalize_block(block: Block) -> Block {
             code,
         },
         Block::ThematicBreak => Block::ThematicBreak,
+        Block::Table(t) => Block::Table(Table {
+            head: normalize_row(t.head),
+            align: t.align,
+            rows: t.rows.into_iter().map(normalize_row).collect(),
+        }),
         Block::Unsupported { kind, fallback } => Block::Unsupported {
             kind,
             fallback: trim_edges(normalize_inlines(fallback)),
@@ -101,6 +106,7 @@ fn inline_round(inlines: Vec<Inline>) -> Vec<Inline> {
     out = canonical_order(out);
     out = unwrap_redundant(out);
     out = flatten_links(out);
+    out = unwrap_void_links(out);
     out = label_bare_links(out);
     out = dedupe_nested_marks(out);
     out = factor_marks(out);
@@ -197,6 +203,26 @@ fn dedupe_nested_marks(inlines: Vec<Inline>) -> Vec<Inline> {
                 node.with_children(cleaned)
             }
             None => node,
+        })
+        .collect()
+}
+
+/// Replace a link that has no destination with its own text.
+///
+/// `[text]()` is a valid CommonMark link with an empty destination, and `<a href="">text</a>` is
+/// what Word and Outlook emit for bookmark anchors. There is nothing to link *to*, but the words
+/// are real content: dropping the node used to take them with it, which is silent content loss —
+/// the worst kind of conversion bug, because nothing tells the user it happened.
+///
+/// Found by CommonMark examples 200, 485, 486 and 567 (`tests/commonmark.rs`).
+fn unwrap_void_links(inlines: Vec<Inline>) -> Vec<Inline> {
+    inlines
+        .into_iter()
+        .flat_map(|node| match node {
+            Inline::Link { ref href, .. } if href.is_empty() => {
+                node.children().map(<[Inline]>::to_vec).unwrap_or_default()
+            }
+            other => vec![other],
         })
         .collect()
 }
@@ -492,6 +518,16 @@ fn hoist_whitespace(inlines: Vec<Inline>) -> Vec<Inline> {
     out
 }
 
+/// Normalize every cell in a table row.
+///
+/// A cell is an inline context like a paragraph, so it gets the same edge trimming: a cell that
+/// begins or ends with whitespace would widen the rendered column for nothing.
+fn normalize_row(row: Row) -> Row {
+    row.into_iter()
+        .map(|cell| trim_edges(normalize_inlines(cell)))
+        .collect()
+}
+
 /// Can this item sit in a tight list?
 ///
 /// CommonMark infers tightness from blank lines, so the flag is not free to disagree with the
@@ -753,6 +789,29 @@ mod tests {
             norm(vec![Inline::bold("a"), Inline::bold("b")]),
             vec![Inline::Bold(vec![Inline::Text("ab".into())])]
         );
+    }
+
+    #[test]
+    fn a_link_with_no_destination_keeps_its_text() {
+        // `<a href="">text</a>` is what Word and Outlook emit for bookmark anchors, and `[x]()` is
+        // a valid CommonMark link. Dropping the node used to delete the words inside it — silent
+        // content loss, found by CommonMark examples 200/485/486/567.
+        let got = norm(vec![Inline::Link {
+            href: String::new(),
+            title: None,
+            content: vec![Inline::text("the docs")],
+        }]);
+        assert_eq!(got, vec![Inline::Text("the docs".into())]);
+    }
+
+    #[test]
+    fn a_link_with_neither_destination_nor_text_is_dropped() {
+        let got = norm(vec![Inline::Link {
+            href: String::new(),
+            title: None,
+            content: vec![],
+        }]);
+        assert_eq!(got, vec![]);
     }
 
     #[test]

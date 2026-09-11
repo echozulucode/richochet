@@ -13,6 +13,7 @@ function stubBackend(): { backend: ConversionBackend; writes: OutboundPayload[] 
   const backend: ConversionBackend = {
     name: 'mock',
     convert: vi.fn((input: string, _from, to) => Promise.resolve(`${to}:${input}`)),
+    outline: () => Promise.resolve([]),
     readClipboard: () => Promise.resolve({ kind: 'text', html: null, rtf: null, text: '' }),
     writeClipboard: (payload: OutboundPayload) => {
       writes.push(payload);
@@ -108,6 +109,7 @@ describe('CopyButton', () => {
     const backend: ConversionBackend = {
       name: 'mock',
       convert: () => Promise.reject(new Error('engine exploded')),
+      outline: () => Promise.resolve([]),
       readClipboard: () => Promise.resolve({ kind: 'text', html: null, rtf: null, text: '' }),
       writeClipboard: () => Promise.resolve(),
     };

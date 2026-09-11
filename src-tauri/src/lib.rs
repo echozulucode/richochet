@@ -14,6 +14,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::convert,
+            commands::outline,
             commands::read_clipboard,
             commands::write_clipboard,
         ])

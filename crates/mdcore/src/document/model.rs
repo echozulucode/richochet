@@ -59,6 +59,11 @@ pub enum Block {
     },
     /// A horizontal rule.
     ThematicBreak,
+    /// A table.
+    ///
+    /// Teams messages carry these routinely — pasted out of Excel or Word — and losing them is the
+    /// most visible way a conversion can disappoint. GFM can express them, so the model does too.
+    Table(Table),
     /// Something we recognized but cannot represent.
     ///
     /// This is how the model degrades gracefully instead of losing content (tables, mentions,
@@ -102,7 +107,68 @@ impl Block {
             Block::BlockQuote(b) => b.iter().all(Block::is_empty),
             Block::CodeBlock { code, .. } => code.is_empty(),
             Block::ThematicBreak => false,
+            // A table with no body and no header text renders to nothing worth keeping.
+            Block::Table(t) => t
+                .rows
+                .iter()
+                .chain(std::iter::once(&t.head))
+                .all(|row| row.iter().all(|cell| cell.iter().all(Inline::is_empty))),
         }
+    }
+}
+
+/// One table cell's inline content.
+pub type Cell = Vec<Inline>;
+
+/// One table row.
+pub type Row = Vec<Cell>;
+
+/// How a table column is aligned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+pub enum Alignment {
+    /// No explicit alignment; the renderer decides.
+    #[default]
+    None,
+    /// Left aligned (`:---`).
+    Left,
+    /// Centred (`:---:`).
+    Center,
+    /// Right aligned (`---:`).
+    Right,
+}
+
+/// A table.
+///
+/// Rows are not required to be rectangular: HTML tables in the wild routinely are not, and a
+/// renderer padding short rows is kinder than a parser rejecting them. `align` is per column and
+/// may be shorter than the widest row.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
+pub struct Table {
+    /// The header row. GFM requires one; an HTML table without a `<thead>` gets an empty header,
+    /// and the Markdown renderer emits a blank header row so the result still parses.
+    pub head: Row,
+    /// Per-column alignment.
+    pub align: Vec<Alignment>,
+    /// The body rows.
+    pub rows: Vec<Row>,
+}
+
+impl Table {
+    /// The widest row, which is how many columns the table really has.
+    pub fn columns(&self) -> usize {
+        std::iter::once(self.head.len())
+            .chain(self.rows.iter().map(Vec::len))
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Alignment for a column, defaulting when `align` is short.
+    pub fn alignment(&self, column: usize) -> Alignment {
+        self.align.get(column).copied().unwrap_or_default()
     }
 }
 
@@ -224,8 +290,13 @@ impl Inline {
             Inline::Bold(c) | Inline::Italic(c) | Inline::Strike(c) => {
                 c.iter().all(Inline::is_empty)
             }
-            // An empty-texted link still carries a URL worth rendering.
-            Inline::Link { href, .. } => href.is_empty(),
+            // A link is empty only when it has neither a destination nor anything to show. An
+            // empty href alone must NOT make it empty: `<a href="">text</a>` is what Word and
+            // Outlook emit for bookmark anchors, and treating it as empty deleted the words
+            // inside it. Found by CommonMark examples 200/485/486/567.
+            Inline::Link { href, content, .. } => {
+                href.is_empty() && content.iter().all(Inline::is_empty)
+            }
             Inline::SoftBreak | Inline::HardBreak => false,
         }
     }

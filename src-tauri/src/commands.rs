@@ -84,6 +84,25 @@ pub fn convert(input: String, from: WireFormat, to: WireFormat) -> Result<String
     )?)
 }
 
+/// Where each top-level block of a Markdown document starts, for scrolling the panes together.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OutlinePayload {
+    /// 1-based source line per top-level block, in document order.
+    pub lines: Vec<u32>,
+}
+
+/// Map the Markdown source to its top-level blocks.
+///
+/// Separate from [`convert`] on purpose: it is only needed for scroll sync, it is cheap, and
+/// keeping it out of the conversion path means the two panes' live update never waits on it.
+#[tauri::command]
+pub fn outline(markdown: String) -> Result<OutlinePayload, CommandError> {
+    Ok(OutlinePayload {
+        lines: mdcore::outline(&markdown).lines,
+    })
+}
+
 /// Read every representation the clipboard offers and return the richest ones.
 #[tauri::command]
 pub fn read_clipboard() -> Result<ClipboardPayload, CommandError> {

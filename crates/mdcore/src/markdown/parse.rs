@@ -1,9 +1,9 @@
 //! Markdown -> document model, via pulldown-cmark.
 //!
 //! The event stream is folded onto a stack of open containers. Anything the
-//! [frozen AST](crate::document::model) cannot represent — tables, footnote definitions, raw HTML
-//! blocks — becomes a [`Block::Unsupported`] carrying the plain text of what was dropped, so
-//! content is never silently lost.
+//! [frozen AST](crate::document::model) cannot represent — footnote definitions, raw HTML blocks —
+//! becomes a [`Block::Unsupported`] carrying the plain text of what was dropped, so content is
+//! never silently lost.
 //!
 //! Three deliberately lossy mappings, all of which converge on a second pass:
 //!
@@ -16,12 +16,14 @@
 //! * **Footnote references become literal text.** `[^1]` becomes the text `[^1]`.
 //!
 //! Tables and footnotes are *enabled* on purpose. Leaving them off would not make them go away; it
-//! would shred a table into paragraphs of pipes. Enabled, they arrive as recognizable containers
-//! that can be captured wholesale as `Unsupported`.
+//! would shred a table into paragraphs of pipes. Tables become [`Block::Table`]; footnote
+//! definitions, which the model has no node for, are captured wholesale as `Unsupported`.
 
-use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
+use pulldown_cmark::{
+    Alignment as GfmAlignment, CodeBlockKind, Event, Options, Parser, Tag, TagEnd,
+};
 
-use crate::document::model::{Block, Document, Inline, List, ListItem};
+use crate::document::model::{Alignment, Block, Document, Inline, List, ListItem, Row, Table};
 
 /// Parse CommonMark (with GFM strikethrough) into the document model.
 ///
@@ -35,16 +37,24 @@ use crate::document::model::{Block, Document, Inline, List, ListItem};
 /// assert_eq!(doc.blocks, vec![Block::Paragraph(vec![Inline::bold("bold")])]);
 /// ```
 pub fn parse(input: &str) -> Document {
+    let mut builder = Builder::new();
+    for event in Parser::new_ext(input, options()) {
+        builder.event(event);
+    }
+    Document::from_blocks(builder.finish())
+}
+
+/// The extensions the engine reads.
+///
+/// [`parse`] and [`outline`] must agree on these exactly: `outline(x).document == parse(x)` is a
+/// documented guarantee, and an extension enabled in one but not the other would break it without
+/// either function looking wrong on its own.
+fn options() -> Options {
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TABLES);
     options.insert(Options::ENABLE_FOOTNOTES);
-
-    let mut builder = Builder::new();
-    for event in Parser::new_ext(input, options) {
-        builder.event(event);
-    }
-    Document::from_blocks(builder.finish())
+    options
 }
 
 /// What kind of container a [`Frame`] is.
@@ -67,6 +77,19 @@ enum Open {
         lang: Option<String>,
         code: String,
     },
+    /// A table being assembled. `align` arrives whole with the opening tag; the rows follow.
+    Table {
+        align: Vec<Alignment>,
+        head: Row,
+        rows: Vec<Row>,
+    },
+    /// One table row. `head` says whether it belongs in the enclosing table's header.
+    TableRow {
+        cells: Row,
+        head: bool,
+    },
+    /// One table cell; its content accumulates in the frame's `inlines` like any other run.
+    TableCell,
     /// A construct the model cannot represent; swallows its whole subtree as plain text.
     Unsupported {
         kind: &'static str,
@@ -86,6 +109,19 @@ enum Open {
         href: String,
         title: Option<String>,
     },
+}
+
+/// Map pulldown-cmark's column alignment onto the model's.
+///
+/// The two enums agree variant for variant; the mapping exists so the frozen AST does not have a
+/// parser's type in its public surface.
+fn alignment(align: GfmAlignment) -> Alignment {
+    match align {
+        GfmAlignment::None => Alignment::None,
+        GfmAlignment::Left => Alignment::Left,
+        GfmAlignment::Center => Alignment::Center,
+        GfmAlignment::Right => Alignment::Right,
+    }
 }
 
 /// One open container, plus the children gathered into it so far.
@@ -115,6 +151,26 @@ impl Builder {
         Builder {
             stack: vec![Frame::new(Open::Root)],
         }
+    }
+
+    /// True when nothing is open but the document itself.
+    ///
+    /// [`outline`] uses this to spot the events that can begin a top-level block: a block only
+    /// ever starts when the stack has returned to the root.
+    fn at_top_level(&self) -> bool {
+        self.stack.len() == 1
+    }
+
+    /// How many top-level blocks have been completed so far.
+    ///
+    /// Blocks reach the root frame only while [`Builder::at_top_level`], so this counter moves
+    /// exactly when a top-level block is finished.
+    fn finished_blocks(&self) -> usize {
+        self.stack
+            .first()
+            .expect("the root frame is never popped")
+            .blocks
+            .len()
     }
 
     /// The innermost open container. The root frame is never popped, so this cannot fail.
@@ -274,7 +330,23 @@ impl Builder {
                 href: dest_url.into_string(),
                 title: (!title.is_empty()).then(|| title.into_string()),
             }),
-            Tag::Table(_) => self.open_unsupported("table"),
+            Tag::Table(alignments) => {
+                self.flush_pending();
+                self.push_frame(Open::Table {
+                    align: alignments.into_iter().map(alignment).collect(),
+                    head: Row::new(),
+                    rows: Vec::new(),
+                });
+            }
+            Tag::TableHead => self.push_frame(Open::TableRow {
+                cells: Row::new(),
+                head: true,
+            }),
+            Tag::TableRow => self.push_frame(Open::TableRow {
+                cells: Row::new(),
+                head: false,
+            }),
+            Tag::TableCell => self.push_frame(Open::TableCell),
             Tag::FootnoteDefinition(label) => {
                 self.flush_pending();
                 self.push_frame(Open::Unsupported {
@@ -392,6 +464,44 @@ impl Builder {
                         title,
                         content,
                     });
+                }
+            }
+            TagEnd::Table => {
+                let frame = self.pop_frame();
+                if let Open::Table { align, head, rows } = frame.open {
+                    self.add_block(Block::Table(Table { head, align, rows }));
+                }
+            }
+            TagEnd::TableHead | TagEnd::TableRow => {
+                let frame = self.pop_frame();
+                let Open::TableRow { cells, head } = frame.open else {
+                    return;
+                };
+                if let Some(Frame {
+                    open:
+                        Open::Table {
+                            head: table_head,
+                            rows,
+                            ..
+                        },
+                    ..
+                }) = self.stack.last_mut()
+                {
+                    if head {
+                        *table_head = cells;
+                    } else {
+                        rows.push(cells);
+                    }
+                }
+            }
+            TagEnd::TableCell => {
+                let frame = self.pop_frame();
+                if let Some(Frame {
+                    open: Open::TableRow { cells, .. },
+                    ..
+                }) = self.stack.last_mut()
+                {
+                    cells.push(frame.inlines);
                 }
             }
             _ => {
@@ -786,14 +896,85 @@ mod tests {
         );
     }
 
+    // ---- tables -------------------------------------------------------------------------------
+
+    fn table(input: &str) -> Table {
+        let got = blocks(input);
+        let [Block::Table(t)] = &got[..] else {
+            panic!("expected one table, got {got:?}");
+        };
+        t.clone()
+    }
+
     #[test]
-    fn a_table_becomes_unsupported_with_its_text_as_fallback() {
-        let got = blocks("| a | b |\n| - | - |\n| 1 | 2 |");
+    fn a_table_becomes_a_table_block() {
+        assert_eq!(
+            table("| a | b |\n| - | - |\n| 1 | 2 |"),
+            Table {
+                head: vec![vec![text("a")], vec![text("b")]],
+                align: vec![Alignment::None, Alignment::None],
+                rows: vec![vec![vec![text("1")], vec![text("2")]]],
+            }
+        );
+    }
+
+    #[test]
+    fn the_delimiter_rows_colons_become_alignments() {
+        assert_eq!(
+            table("| a | b | c | d |\n| :- | :-: | -: | - |\n| 1 | 2 | 3 | 4 |").align,
+            vec![
+                Alignment::Left,
+                Alignment::Center,
+                Alignment::Right,
+                Alignment::None,
+            ]
+        );
+    }
+
+    #[test]
+    fn a_table_with_several_body_rows_keeps_them_in_order() {
+        let t = table("| h |\n| - |\n| 1 |\n| 2 |\n| 3 |");
+        assert_eq!(t.rows.len(), 3);
+        assert_eq!(t.columns(), 1);
+        assert_eq!(t.rows[2], vec![vec![text("3")]]);
+    }
+
+    #[test]
+    fn an_escaped_pipe_is_cell_content_not_a_separator() {
+        let t = table(
+            r"| a \| b | c |
+| --- | --- |
+| d | e |",
+        );
+        assert_eq!(t.head, vec![vec![text("a | b")], vec![text("c")]]);
+    }
+
+    #[test]
+    fn table_cells_carry_inline_marks_and_links() {
+        let t = table("| **b** | [t](u) |\n| - | - |\n| `c` | ~~s~~ |");
+        assert_eq!(t.head[0], vec![Inline::bold("b")]);
+        assert_eq!(t.head[1], vec![Inline::link("u", "t")]);
+        assert_eq!(t.rows[0][0], vec![Inline::Code("c".into())]);
+        assert_eq!(t.rows[0][1], vec![Inline::Strike(vec![text("s")])]);
+    }
+
+    #[test]
+    fn a_table_nested_in_a_blockquote_is_still_a_table() {
+        assert!(matches!(
+            &blocks("> | a |\n> | - |\n> | 1 |")[..],
+            [Block::BlockQuote(inner)] if matches!(inner[..], [Block::Table(_)])
+        ));
+    }
+
+    #[test]
+    fn a_table_inside_a_footnote_is_still_captured_as_text() {
+        // The footnote collector swallows its whole subtree, tables included; nothing is lost, but
+        // nothing structured survives either.
+        let got = blocks("[^1]: | a | b |\n    | - | - |\n    | 1 | 2 |");
         let [Block::Unsupported { kind, fallback }] = &got[..] else {
             panic!("expected one unsupported block, got {got:?}");
         };
-        assert_eq!(kind, "table");
-        // The cells survive; the layout does not.
+        assert_eq!(kind, "footnote");
         let flat = format!("{fallback:?}");
         for cell in ["a", "b", "1", "2"] {
             assert!(flat.contains(cell), "cell {cell} missing from {flat}");
@@ -894,5 +1075,245 @@ let x = 1;
         assert!(matches!(got[3], Block::BlockQuote(_)));
         assert!(matches!(got[4], Block::CodeBlock { .. }));
         assert!(matches!(got[5], Block::ThematicBreak));
+    }
+}
+
+/// Parse Markdown, keeping the 1-based source line each top-level block began on.
+///
+/// See [`crate::Outline`]. The returned `lines` is exactly parallel to `document.blocks` — a block
+/// the normalizer drops takes its line with it — because the frontend indexes one by the other to
+/// scroll the two panes together, and a length mismatch would not fail, it would silently
+/// misalign.
+///
+/// `outline(x).document` is always equal to [`parse`]`(x)`; the extra work is only the bookkeeping
+/// that keeps the lines attached. That holds because
+/// [`normalize_blocks`](crate::document::normalize) maps over top-level blocks independently, so
+/// normalizing each block alone gives the same answer as normalizing the document — which is what
+/// makes it safe to drop a line at the moment its block is dropped.
+///
+/// ```
+/// let outline = mdcore::markdown::outline("# Title\n\nBody.");
+/// assert_eq!(outline.lines, vec![1, 3]);
+/// assert_eq!(outline.lines.len(), outline.document.blocks.len());
+/// ```
+pub fn outline(input: &str) -> crate::Outline {
+    let mut builder = Builder::new();
+    // The byte offset of every block completed so far, in the order the blocks were completed.
+    let mut offsets: Vec<usize> = Vec::new();
+    // Where the block currently being built started. Only events arriving with the stack at the
+    // root can begin a top-level block, so that is the only place this moves.
+    let mut pending = 0usize;
+
+    for (event, range) in Parser::new_ext(input, options()).into_offset_iter() {
+        if builder.at_top_level() {
+            pending = range.start;
+        }
+        let before = builder.finished_blocks();
+        builder.event(event);
+        // Usually one block per closing event, but a container that was holding loose inlines
+        // flushes them as a paragraph at the same moment, so count rather than assume.
+        for _ in before..builder.finished_blocks() {
+            offsets.push(pending);
+        }
+    }
+
+    let blocks = builder.finish();
+    // `finish` salvages whatever unbalanced frames were left open; those blocks all belong to
+    // whatever was last opened.
+    offsets.resize(blocks.len(), pending);
+
+    let newlines = newline_offsets(input);
+    let mut document = Vec::with_capacity(blocks.len());
+    let mut lines = Vec::with_capacity(blocks.len());
+    for (block, offset) in blocks.into_iter().zip(offsets) {
+        // Normalizing one block at a time is what keeps the two vectors parallel: a block that
+        // normalizes away simply never contributes a line.
+        for normalized in Document::from_blocks(vec![block]).blocks {
+            document.push(normalized);
+            lines.push(line_of(&newlines, offset));
+        }
+    }
+
+    crate::Outline {
+        document: Document { blocks: document },
+        lines,
+    }
+}
+
+/// Byte offsets of every line feed in the source, ascending.
+fn newline_offsets(input: &str) -> Vec<usize> {
+    input
+        .bytes()
+        .enumerate()
+        .filter(|(_, b)| *b == b'\n')
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// The 1-based line containing `offset`.
+///
+/// Counting line feeds handles CRLF as well as LF: the carriage return sits before the line
+/// feed and so falls on the line that is ending, which is where it belongs.
+fn line_of(newlines: &[usize], offset: usize) -> u32 {
+    let line = newlines.partition_point(|&n| n < offset) + 1;
+    u32::try_from(line).unwrap_or(u32::MAX)
+}
+
+#[cfg(test)]
+mod outline_tests {
+    use super::*;
+
+    /// Every assertion in this module goes through here first: the parallel-length invariant is
+    /// the whole contract, and a test that checked lines without checking the length would pass
+    /// while the frontend silently misaligned.
+    fn lines_of(input: &str) -> Vec<u32> {
+        let outline = outline(input);
+        assert_eq!(
+            outline.lines.len(),
+            outline.document.blocks.len(),
+            "lines and blocks are not parallel for {input:?}: {outline:?}"
+        );
+        assert_eq!(
+            outline.document,
+            parse(input),
+            "per-block normalization diverged from whole-document normalization for {input:?}"
+        );
+        outline.lines
+    }
+
+    #[test]
+    fn an_empty_input_has_an_empty_document_and_no_lines() {
+        assert_eq!(lines_of(""), Vec::<u32>::new());
+        assert!(outline("").document.is_empty());
+        assert_eq!(lines_of("   \n\n  "), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn lines_are_one_based() {
+        assert_eq!(lines_of("first"), vec![1]);
+    }
+
+    #[test]
+    fn every_kind_of_block_reports_the_line_it_started_on() {
+        let src = "\
+# Title
+
+A paragraph
+that wraps.
+
+
+- one
+- two
+
+```rust
+let x = 1;
+```
+
+
+
+> quoted
+
+---
+
+| a | b |
+| - | - |
+| 1 | 2 |
+";
+        let outline = outline(src);
+        assert_eq!(outline.lines.len(), outline.document.blocks.len());
+        // Heading 1, paragraph 3-4, list 7-8, fence 10-12, quote 16, rule 18, table 20-22.
+        assert_eq!(outline.lines, vec![1, 3, 7, 10, 16, 18, 20]);
+        assert!(matches!(outline.document.blocks[0], Block::Heading { .. }));
+        assert!(matches!(outline.document.blocks[2], Block::List(_)));
+        assert!(matches!(
+            outline.document.blocks[3],
+            Block::CodeBlock { .. }
+        ));
+        assert!(matches!(outline.document.blocks[5], Block::ThematicBreak));
+        assert!(matches!(outline.document.blocks[6], Block::Table(_)));
+    }
+
+    #[test]
+    fn a_document_that_starts_with_blank_lines_does_not_start_at_line_one() {
+        assert_eq!(lines_of("\n\n\n# Late\n\nbody\n"), vec![4, 6]);
+        assert_eq!(lines_of("   \n\t\nbody"), vec![3]);
+    }
+
+    #[test]
+    fn crlf_input_counts_lines_the_same_way() {
+        assert_eq!(lines_of("# a\r\n\r\nb\r\n\r\n> q\r\n"), vec![1, 3, 5]);
+        // The same document with Unix endings must agree.
+        assert_eq!(lines_of("# a\n\nb\n\n> q\n"), vec![1, 3, 5]);
+    }
+
+    #[test]
+    fn a_block_the_normalizer_drops_takes_its_line_with_it() {
+        // The empty heading on line 3 renders to nothing, so it is not in `blocks` — and its line
+        // must not be in `lines` either, or every block after it would scroll to the wrong place.
+        let outline = outline("# kept\n\n#\n\nafter\n");
+        assert_eq!(outline.lines.len(), outline.document.blocks.len());
+        assert_eq!(outline.document.blocks.len(), 2);
+        assert_eq!(outline.lines, vec![1, 5]);
+    }
+
+    #[test]
+    fn several_dropped_blocks_in_a_row_stay_parallel() {
+        let outline = outline("#\n\n#\n\n#\n\nreal\n");
+        assert_eq!(outline.lines.len(), outline.document.blocks.len());
+        assert_eq!(outline.lines, vec![7]);
+    }
+
+    #[test]
+    fn nested_blocks_do_not_get_lines_of_their_own() {
+        // Only top level is indexed: the list is one entry however many items it has.
+        assert_eq!(lines_of("- a\n- b\n- c\n\n> q\n>\n> r\n"), vec![1, 5]);
+    }
+
+    #[test]
+    fn the_document_always_equals_a_plain_parse() {
+        // The claim that per-block normalization is equivalent to whole-document normalization,
+        // over inputs that exercise dropping, nesting, tables and the unsupported collectors.
+        for input in [
+            "",
+            "just text",
+            "#\n\n#\n",
+            "# a\n\nb\n\n- c\n  - d\n\n> e\n\n```\nf\n```\n",
+            "| a | b |\n| :- | -: |\n| 1 | 2 |\n\nafter\n",
+            "<div>\nhtml\n</div>\n\ntext[^1]\n\n[^1]: note\n",
+            "***x***\n\n**a _b_**\n\n![](pic.png)\n",
+            "\n\n\n",
+            "setext\n======\n\nmore\n",
+        ] {
+            let outline = outline(input);
+            assert_eq!(
+                outline.document,
+                parse(input),
+                "outline diverged from parse for {input:?}"
+            );
+            assert_eq!(
+                outline.lines.len(),
+                outline.document.blocks.len(),
+                "not parallel for {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn lines_never_decrease() {
+        let src = "a\n\n- b\n\n# c\n\n```\nd\n```\n\n> e\n\nf\n";
+        let lines = lines_of(src);
+        assert!(
+            lines.windows(2).all(|w| w[0] < w[1]),
+            "lines went backwards: {lines:?}"
+        );
+        assert!(lines.iter().all(|&l| l >= 1));
+    }
+
+    #[test]
+    fn line_of_counts_newlines_before_the_offset() {
+        let newlines = newline_offsets("a\nbb\n\nc");
+        assert_eq!(line_of(&newlines, 0), 1);
+        assert_eq!(line_of(&newlines, 2), 2);
+        assert_eq!(line_of(&newlines, 6), 4);
     }
 }

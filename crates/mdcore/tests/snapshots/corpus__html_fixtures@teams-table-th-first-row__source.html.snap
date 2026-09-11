@@ -1,0 +1,23 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-table-th-first-row/source.html
+---
+=== markdown ===
+| Name | Value |
+| ---- | ----- |
+| x    | 1     |
+
+=== teams html ===
+<table>
+<thead>
+<tr><th>Name</th><th>Value</th></tr>
+</thead>
+<tbody>
+<tr><td>x</td><td>1</td></tr>
+</tbody>
+</table>
+
+=== plain text ===
+Name  Value
+x     1

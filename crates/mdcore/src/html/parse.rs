@@ -28,8 +28,10 @@ use html5ever::tendril::TendrilSink;
 use html5ever::{local_name, ns, parse_fragment, ParseOpts, QualName};
 use markup5ever_rcdom::{Handle, NodeData, RcDom};
 
-use crate::document::model::{Block, Document, Inline, List, ListItem};
-use crate::html::styles::{marks_for, MarkSet};
+use crate::document::model::{
+    Alignment, Block, Cell, Document, Inline, List, ListItem, Row, Table,
+};
+use crate::html::styles::{declarations, marks_for, MarkSet};
 
 /// Parse an HTML fragment into the document model, normalizing markup to intent.
 pub fn parse(input: &str) -> Document {
@@ -134,12 +136,25 @@ pub fn sanitize(input: &str) -> String {
     // Attributes allowed anywhere. `style` is the whole point of `styles.rs`; `class` carries the
     // `language-*` hint on code blocks.
     let generic_attributes: HashSet<&str> = HashSet::from(["style", "class", "title", "lang"]);
+    // Table attributes are listed on every element that can carry them: `align` is the legacy
+    // spelling of `text-align` and Word writes it far more often than the CSS form, and a `colspan`
+    // that ammonia strips would silently shift every following cell one column to the left.
     let tag_attributes: HashMap<&str, HashSet<&str>> = HashMap::from([
         ("a", HashSet::from(["href"])),
         ("ol", HashSet::from(["start"])),
         ("img", HashSet::from(["alt", "src"])),
-        ("td", HashSet::from(["colspan", "rowspan"])),
-        ("th", HashSet::from(["colspan", "rowspan", "scope"])),
+        ("table", HashSet::from(["align"])),
+        ("thead", HashSet::from(["align"])),
+        ("tbody", HashSet::from(["align"])),
+        ("tfoot", HashSet::from(["align"])),
+        ("tr", HashSet::from(["align"])),
+        ("colgroup", HashSet::from(["align", "span"])),
+        ("col", HashSet::from(["align", "span"])),
+        ("td", HashSet::from(["colspan", "rowspan", "align"])),
+        (
+            "th",
+            HashSet::from(["colspan", "rowspan", "scope", "align"]),
+        ),
     ]);
     // Blacklisted *with* their contents: dropping the tag but keeping the text would paste a
     // script body into the document as prose.
@@ -662,11 +677,13 @@ fn walk_element(node: &Handle, ctx: Ctx, out: &mut BlockBuilder) {
         }
         "hr" => out.push_block(Block::ThematicBreak),
         "table" => {
-            let fallback = table_fallback(node, ctx.distributing(declared));
-            out.push_block(Block::Unsupported {
-                kind: "table".to_string(),
-                fallback,
-            });
+            let inner = ctx.distributing(declared);
+            // A caption has nowhere to live in the model, so it is emitted as a paragraph
+            // immediately before the table. See [`caption_paragraph`].
+            if let Some(caption) = caption_paragraph(node, inner) {
+                out.push_block(Block::Paragraph(caption));
+            }
+            out.push_block(Block::Table(build_table(node, inner)));
         }
         "br" => out.inlines.push_break(),
         "a" => walk_anchor(node, ctx, declared, out),
@@ -838,6 +855,7 @@ fn flatten_blocks(blocks: Vec<Block>) -> Vec<Inline> {
             // Inline code carries no newlines, so a flattened code block becomes one line.
             Block::CodeBlock { code, .. } => vec![Inline::Code(code.replace('\n', " "))],
             Block::ThematicBreak => Vec::new(),
+            Block::Table(table) => flatten_table(table),
         };
         if part.is_empty() {
             continue;
@@ -850,20 +868,16 @@ fn flatten_blocks(blocks: Vec<Block>) -> Vec<Inline> {
     out
 }
 
-/// The fallback content of a table: the cell text, rows separated by hard breaks and cells by a
-/// pipe, so that a pasted table still reads as a table after conversion.
-fn table_fallback(node: &Handle, ctx: Ctx) -> Vec<Inline> {
+/// Reduce a table to a single inline run, for the places the model has no room for one.
+///
+/// Reached only by [`flatten_blocks`] — that is, by a table nested inside a heading or inside
+/// another table's cell. Supporting nested tables properly would mean a cell type that can hold
+/// blocks, which is a large change to the frozen model for a shape almost nothing produces, so an
+/// inner table degrades to its cell text instead: cells separated by a pipe, rows by a break.
+fn flatten_table(table: Table) -> Vec<Inline> {
     let mut out: Vec<Inline> = Vec::new();
-    for row in descendants_named(node, &["tr"]) {
-        let mut cells: Vec<Vec<Inline>> = Vec::new();
-        for cell in child_elements(&row) {
-            if matches!(tag_name(&cell).as_deref(), Some("td") | Some("th")) {
-                let content = inline_subtree(&cell, ctx);
-                if !content.is_empty() {
-                    cells.push(content);
-                }
-            }
-        }
+    for row in std::iter::once(table.head).chain(table.rows) {
+        let cells: Vec<Cell> = row.into_iter().filter(|cell| !cell.is_empty()).collect();
         if cells.is_empty() {
             continue;
         }
@@ -878,6 +892,302 @@ fn table_fallback(node: &Handle, ctx: Ctx) -> Vec<Inline> {
         }
     }
     out
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tables
+// ---------------------------------------------------------------------------------------------
+
+/// The largest `colspan`, `rowspan` or `<col span>` this module will honour.
+///
+/// Spans arrive from another process on the clipboard and are never validated by anything, so
+/// `colspan="100000000"` is a plausible input. Expanding one into empty cells buys nothing and
+/// costs a hang, so spans are clamped instead.
+const MAX_SPAN: usize = 1000;
+
+/// A `<td>`/`<th>` as read from the DOM, before its spans are laid out on the grid.
+struct RawCell {
+    content: Vec<Inline>,
+    colspan: usize,
+    rowspan: usize,
+    align: Alignment,
+}
+
+/// A `<tr>` as read from the DOM.
+struct RawRow {
+    cells: Vec<RawCell>,
+    /// The row came out of a `<thead>`.
+    in_head: bool,
+    /// The row has cells and every one of them is a `<th>`.
+    all_header: bool,
+}
+
+/// Build a [`Table`] from a `<table>` element.
+fn build_table(node: &Handle, ctx: Ctx) -> Table {
+    let raw = collect_rows(node, ctx);
+    let head_index = header_index(&raw);
+    let column_align = column_alignments(node);
+    let mut placed = place_grid(raw);
+
+    // `place_grid` keeps head and body on one grid, so a `rowspan` reaching out of the `<thead>`
+    // still shifts the body rows it covers. The header row is lifted out afterwards.
+    let (head, head_align) = match head_index {
+        Some(index) if index < placed.len() => placed.remove(index),
+        _ => (Row::new(), Vec::new()),
+    };
+    let body_align = placed.first().map(|(_, a)| a.clone()).unwrap_or_default();
+    let rows: Vec<Row> = placed.into_iter().map(|(row, _)| row).collect();
+
+    // Alignment comes from the header row when there is one, because that is the row an author
+    // styles; otherwise from the first body row. `<col>` fills in whatever neither declared.
+    let cell_align = if head_index.is_some() {
+        head_align
+    } else {
+        body_align
+    };
+
+    Table {
+        head,
+        align: merge_alignments(&cell_align, &column_align),
+        rows,
+    }
+}
+
+/// Read every `<tr>` under a `<table>`, in document order.
+///
+/// `<tbody>`, `<tfoot>` and a bare `<tr>` all contribute body rows; only `<thead>` is special. A
+/// `<tfoot>` keeps its document position rather than being moved to the end: the model has no
+/// footer, and reordering content is a bigger surprise than leaving it where the author put it.
+fn collect_rows(table: &Handle, ctx: Ctx) -> Vec<RawRow> {
+    let mut rows = Vec::new();
+    for child in child_elements(table) {
+        let in_head = match tag_name(&child).as_deref() {
+            Some("thead") => true,
+            Some("tbody") | Some("tfoot") => false,
+            // html5ever normally moves a bare `<tr>` into an implied `<tbody>`, but a fragment
+            // parse does not always, so handle it here too.
+            Some("tr") => {
+                rows.push(read_row(&child, false, ctx));
+                continue;
+            }
+            _ => continue,
+        };
+        for tr in child_elements(&child) {
+            if tag_name(&tr).as_deref() == Some("tr") {
+                rows.push(read_row(&tr, in_head, ctx));
+            }
+        }
+    }
+    rows
+}
+
+/// Read one `<tr>` and its cells.
+fn read_row(tr: &Handle, in_head: bool, ctx: Ctx) -> RawRow {
+    let row_ctx = ctx.distributing(marks_for("tr", attr(tr, "style").as_deref()));
+    let row_align = align_of(tr);
+
+    let mut cells = Vec::new();
+    let mut all_header = true;
+    for cell in child_elements(tr) {
+        let tag = tag_name(&cell).unwrap_or_default();
+        match tag.as_str() {
+            "th" => {}
+            "td" => all_header = false,
+            _ => continue,
+        }
+        let cell_ctx = row_ctx.distributing(marks_for(&tag, attr(&cell, "style").as_deref()));
+        cells.push(RawCell {
+            // Cell content is inline content, run through the same machinery as everything else,
+            // so marks, links and code inside a cell survive.
+            content: inline_subtree(&cell, cell_ctx),
+            colspan: span_attr(&cell, "colspan"),
+            rowspan: span_attr(&cell, "rowspan"),
+            align: first_align(align_of(&cell), row_align),
+        });
+    }
+
+    RawRow {
+        all_header: all_header && !cells.is_empty(),
+        cells,
+        in_head,
+    }
+}
+
+/// Which row, if any, is the header.
+///
+/// A `<thead>` says so outright. Failing that, a first row made up entirely of `<th>` is the
+/// convention every producer uses; anything else leaves the header empty and puts every row in the
+/// body, because guessing wrong promotes real data into a header where it cannot be read back.
+fn header_index(rows: &[RawRow]) -> Option<usize> {
+    if let Some(index) = rows.iter().position(|row| row.in_head) {
+        return Some(index);
+    }
+    rows.first().filter(|row| row.all_header).map(|_| 0)
+}
+
+/// Lay the rows out on a grid, expanding `colspan` and `rowspan` into the cells they cover.
+///
+/// **Neither span can be represented.** A [`Row`] is a flat list of cells with no notion of one
+/// cell covering several, and widening the model to carry spans would change a contract four other
+/// modules depend on for a feature GFM cannot express either. Dropping the content would be worse
+/// than changing its shape, so a spanning cell keeps its content in the first grid slot it covers
+/// and every further slot it covers becomes an empty cell. A merged table therefore comes out
+/// rectangular, with the merge showing as blanks rather than as missing text — and, importantly,
+/// with the cells *after* a span still in their own columns instead of shifted left.
+///
+/// Returns each row together with the per-column alignment its cells declared.
+fn place_grid(rows: Vec<RawRow>) -> Vec<(Row, Vec<Alignment>)> {
+    let mut out = Vec::with_capacity(rows.len());
+    // For each column, how many rows are still covered by a `rowspan` opened above.
+    let mut blocked: Vec<usize> = Vec::new();
+
+    for raw in rows {
+        let mut cells = Row::new();
+        let mut aligns: Vec<Alignment> = Vec::new();
+        let mut column = 0usize;
+
+        for cell in raw.cells {
+            // Step over the columns a `rowspan` from an earlier row already owns.
+            while blocked.get(column).copied().unwrap_or(0) > 0 {
+                cells.push(Cell::new());
+                aligns.push(Alignment::None);
+                column += 1;
+            }
+            let mut content = Some(cell.content);
+            for _ in 0..cell.colspan {
+                if blocked.len() <= column {
+                    blocked.resize(column + 1, 0);
+                }
+                // This row plus the `rowspan - 1` rows below it; the decrement at the end of the
+                // row settles the count.
+                blocked[column] = cell.rowspan;
+                cells.push(content.take().unwrap_or_default());
+                aligns.push(cell.align);
+                column += 1;
+            }
+        }
+
+        for count in blocked.iter_mut() {
+            *count = count.saturating_sub(1);
+        }
+        out.push((cells, aligns));
+    }
+    out
+}
+
+/// Per-column alignment declared by `<colgroup>` / `<col>`.
+fn column_alignments(table: &Handle) -> Vec<Alignment> {
+    let mut out = Vec::new();
+    for child in child_elements(table) {
+        match tag_name(&child).as_deref() {
+            Some("colgroup") => {
+                let group = align_of(&child);
+                let cols: Vec<Handle> = child_elements(&child)
+                    .into_iter()
+                    .filter(|c| tag_name(c).as_deref() == Some("col"))
+                    .collect();
+                if cols.is_empty() {
+                    // A `<colgroup span="3">` with no children spans that many columns itself.
+                    out.extend(std::iter::repeat_n(group, span_attr(&child, "span")));
+                }
+                for col in cols {
+                    let align = first_align(align_of(&col), group);
+                    out.extend(std::iter::repeat_n(align, span_attr(&col, "span")));
+                }
+            }
+            Some("col") => {
+                let align = align_of(&child);
+                out.extend(std::iter::repeat_n(align, span_attr(&child, "span")));
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Let the cells' alignment win where they have one, falling back to `<col>`.
+///
+/// Trailing [`Alignment::None`]s are dropped: [`Table::alignment`] defaults when `align` is short,
+/// so keeping them would only make two equal tables compare unequal.
+fn merge_alignments(cells: &[Alignment], columns: &[Alignment]) -> Vec<Alignment> {
+    let width = cells.len().max(columns.len());
+    let mut out: Vec<Alignment> = (0..width)
+        .map(|i| {
+            first_align(
+                cells.get(i).copied().unwrap_or_default(),
+                columns.get(i).copied().unwrap_or_default(),
+            )
+        })
+        .collect();
+    while out.last() == Some(&Alignment::None) {
+        out.pop();
+    }
+    out
+}
+
+/// The alignment an element declares, from `style="text-align:..."` or the legacy `align="..."`.
+///
+/// CSS wins over the presentational attribute, which is what a browser does.
+fn align_of(node: &Handle) -> Alignment {
+    if let Some(style) = attr(node, "style") {
+        for (property, value) in declarations(&style) {
+            if property == "text-align" {
+                if let Some(align) = parse_align(&value) {
+                    return align;
+                }
+            }
+        }
+    }
+    attr(node, "align")
+        .and_then(|value| parse_align(&value.to_ascii_lowercase()))
+        .unwrap_or_default()
+}
+
+fn parse_align(value: &str) -> Option<Alignment> {
+    match value.trim() {
+        "left" | "start" => Some(Alignment::Left),
+        "center" | "centre" => Some(Alignment::Center),
+        "right" | "end" => Some(Alignment::Right),
+        // `justify`, `inherit` and anything malformed are no opinion at all.
+        _ => None,
+    }
+}
+
+/// `a` unless it has no opinion, in which case `b`.
+fn first_align(a: Alignment, b: Alignment) -> Alignment {
+    if a == Alignment::None {
+        b
+    } else {
+        a
+    }
+}
+
+/// A `colspan` / `rowspan` / `span` attribute, defaulting to 1 and clamped to [`MAX_SPAN`].
+fn span_attr(node: &Handle, name: &str) -> usize {
+    attr(node, name)
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .unwrap_or(1)
+        .clamp(1, MAX_SPAN)
+}
+
+/// A table's `<caption>`, as the inline content of a paragraph.
+///
+/// The model has no field for a caption and will not grow one for a single string, so the choice
+/// is where to put the text rather than whether to keep it. A paragraph immediately *before* the
+/// table is where a reader expects a caption, is what HTML itself renders by default, and is the
+/// only placement that survives Markdown — folding it into a cell would put prose in the data.
+fn caption_paragraph(table: &Handle, ctx: Ctx) -> Option<Vec<Inline>> {
+    for child in child_elements(table) {
+        if tag_name(&child).as_deref() != Some("caption") {
+            continue;
+        }
+        let caption_ctx = ctx.distributing(marks_for("caption", attr(&child, "style").as_deref()));
+        let content = inline_subtree(&child, caption_ctx);
+        if !content.is_empty() {
+            return Some(content);
+        }
+    }
+    None
 }
 
 /// The verbatim text of a `<pre>`: no whitespace collapsing, `<br>` counted as a newline.
@@ -1347,21 +1657,248 @@ mod tests {
         );
     }
 
+    // ---------------------------------------------------------------------------------------
+    // Tables
+    // ---------------------------------------------------------------------------------------
+
+    /// The single table a fixture parses to, for the many cases that produce exactly one.
+    fn table(html: &str) -> Table {
+        match blocks(html).into_iter().next() {
+            Some(Block::Table(t)) => t,
+            other => panic!("expected a table, got {other:?}"),
+        }
+    }
+
+    fn cell(text: &str) -> Cell {
+        vec![Inline::text(text)]
+    }
+
     #[test]
-    fn a_table_degrades_to_unsupported_with_its_cell_text() {
-        let got =
-            blocks("<table><tr><th>h1</th><th>h2</th></tr><tr><td>a</td><td>b</td></tr></table>");
+    fn a_thead_is_the_header_row() {
+        let got = table(concat!(
+            "<table><thead><tr><th>H1</th><th>H2</th></tr></thead>",
+            "<tbody><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></tbody></table>"
+        ));
+        assert_eq!(got.head, vec![cell("H1"), cell("H2")]);
         assert_eq!(
-            got,
-            vec![Block::Unsupported {
-                kind: "table".to_string(),
-                fallback: vec![
-                    Inline::Text("h1 | h2".to_string()),
-                    Inline::HardBreak,
-                    Inline::Text("a | b".to_string()),
-                ],
-            }]
+            got.rows,
+            vec![vec![cell("a"), cell("b")], vec![cell("c"), cell("d")]]
         );
+        assert_eq!(got.align, vec![]);
+        assert_eq!(got.columns(), 2);
+    }
+
+    #[test]
+    fn without_a_thead_an_all_th_first_row_is_the_header() {
+        let got =
+            table("<table><tr><th>H1</th><th>H2</th></tr><tr><td>a</td><td>b</td></tr></table>");
+        assert_eq!(got.head, vec![cell("H1"), cell("H2")]);
+        assert_eq!(got.rows, vec![vec![cell("a"), cell("b")]]);
+    }
+
+    #[test]
+    fn a_table_with_no_header_puts_everything_in_the_body() {
+        let got =
+            table("<table><tr><td>a</td><td>b</td></tr><tr><td>c</td><td>d</td></tr></table>");
+        assert!(got.head.is_empty());
+        assert_eq!(
+            got.rows,
+            vec![vec![cell("a"), cell("b")], vec![cell("c"), cell("d")]]
+        );
+    }
+
+    #[test]
+    fn a_mixed_first_row_is_data_not_a_header() {
+        // Promoting it would move real data somewhere it can never be read back from.
+        let got = table("<table><tr><th>label</th><td>value</td></tr></table>");
+        assert!(got.head.is_empty());
+        assert_eq!(got.rows, vec![vec![cell("label"), cell("value")]]);
+    }
+
+    #[test]
+    fn tbody_tfoot_and_bare_rows_all_contribute_body_rows() {
+        let got = table(concat!(
+            "<table><thead><tr><th>h</th></tr></thead>",
+            "<tbody><tr><td>body</td></tr></tbody>",
+            "<tfoot><tr><td>foot</td></tr></tfoot></table>"
+        ));
+        assert_eq!(got.head, vec![cell("h")]);
+        assert_eq!(got.rows, vec![vec![cell("body")], vec![cell("foot")]]);
+    }
+
+    #[test]
+    fn extra_thead_rows_stay_in_the_body() {
+        // The model holds one header row; the rest are content and keep their order.
+        let got = table(concat!(
+            "<table><thead><tr><th>H</th></tr><tr><th>sub</th></tr></thead>",
+            "<tbody><tr><td>a</td></tr></tbody></table>"
+        ));
+        assert_eq!(got.head, vec![cell("H")]);
+        assert_eq!(got.rows, vec![vec![cell("sub")], vec![cell("a")]]);
+    }
+
+    #[test]
+    fn ragged_rows_are_kept_ragged() {
+        // The model tolerates this on purpose; padding is the renderer's job, not the parser's.
+        let got = table(concat!(
+            "<table><tr><td>a</td><td>b</td><td>c</td></tr>",
+            "<tr><td>d</td></tr></table>"
+        ));
+        assert_eq!(
+            got.rows,
+            vec![vec![cell("a"), cell("b"), cell("c")], vec![cell("d")]]
+        );
+        assert_eq!(got.columns(), 3);
+    }
+
+    #[test]
+    fn alignment_comes_from_the_header_row_either_spelling() {
+        let got = table(concat!(
+            r#"<table><thead><tr><th align="RIGHT">a</th>"#,
+            r#"<th style="text-align: center">b</th><th>c</th></tr></thead>"#,
+            "<tbody><tr><td>1</td><td>2</td><td>3</td></tr></tbody></table>"
+        ));
+        // The trailing "no opinion" is dropped: `Table::alignment` defaults when `align` is short.
+        assert_eq!(got.align, vec![Alignment::Right, Alignment::Center]);
+        assert_eq!(got.alignment(2), Alignment::None);
+    }
+
+    #[test]
+    fn alignment_falls_back_to_the_first_body_row() {
+        let got = table(concat!(
+            r#"<table><tr><td style="text-align:left">a</td>"#,
+            r#"<td align="right">b</td></tr>"#,
+            r#"<tr><td align="center">c</td><td>d</td></tr></table>"#
+        ));
+        assert_eq!(got.align, vec![Alignment::Left, Alignment::Right]);
+    }
+
+    #[test]
+    fn col_elements_supply_alignment_the_cells_do_not() {
+        let got = table(concat!(
+            r#"<table><colgroup><col align="center"><col align="right"></colgroup>"#,
+            r#"<tr><td style="text-align:left">a</td><td>b</td></tr></table>"#
+        ));
+        // The cell wins where it has an opinion; `<col>` fills in the rest.
+        assert_eq!(got.align, vec![Alignment::Left, Alignment::Right]);
+    }
+
+    #[test]
+    fn a_cell_keeps_its_marks_and_links() {
+        let got = table(concat!(
+            "<table><tr><td><b>bold</b> and ",
+            r#"<a href="https://example.com">a <code>link</code></a></td></tr></table>"#
+        ));
+        assert_eq!(
+            got.rows,
+            vec![vec![vec![
+                Inline::bold("bold"),
+                Inline::Text(" and ".to_string()),
+                Inline::Link {
+                    href: "https://example.com".to_string(),
+                    title: None,
+                    content: vec![
+                        Inline::Text("a ".to_string()),
+                        Inline::Code("link".to_string()),
+                    ],
+                },
+            ]]]
+        );
+    }
+
+    #[test]
+    fn a_caption_becomes_a_paragraph_before_the_table() {
+        let got = blocks("<table><caption>Q3 revenue</caption><tr><td>a</td></tr></table>");
+        assert_eq!(got.len(), 2, "{got:?}");
+        assert_eq!(got[0], Block::para("Q3 revenue"));
+        assert!(matches!(got[1], Block::Table(_)), "{got:?}");
+    }
+
+    #[test]
+    fn a_colspan_leaves_the_columns_it_covers_empty() {
+        let got = table(concat!(
+            r#"<table><tr><td colspan="2">wide</td><td>c</td></tr>"#,
+            "<tr><td>a</td><td>b</td><td>c</td></tr></table>"
+        ));
+        assert_eq!(
+            got.rows,
+            vec![
+                vec![cell("wide"), Cell::new(), cell("c")],
+                vec![cell("a"), cell("b"), cell("c")],
+            ]
+        );
+    }
+
+    #[test]
+    fn a_rowspan_keeps_the_following_rows_in_their_own_columns() {
+        let got = table(concat!(
+            r#"<table><tr><td rowspan="2">tall</td><td>b</td></tr>"#,
+            "<tr><td>c</td></tr></table>"
+        ));
+        assert_eq!(
+            got.rows,
+            vec![
+                vec![cell("tall"), cell("b")],
+                // Without grid placement `c` would land in column 0, under "tall".
+                vec![Cell::new(), cell("c")],
+            ]
+        );
+    }
+
+    #[test]
+    fn an_absurd_span_is_clamped_rather_than_expanded() {
+        let got = table(r#"<table><tr><td colspan="100000000">x</td></tr></table>"#);
+        assert_eq!(got.columns(), MAX_SPAN);
+    }
+
+    #[test]
+    fn a_nested_table_degrades_to_its_cell_text() {
+        let got = table(concat!(
+            "<table><tr><td><table><tr><td>x</td><td>y</td></tr></table></td>",
+            "<td>b</td></tr></table>"
+        ));
+        assert_eq!(got.rows, vec![vec![cell("x | y"), cell("b")]]);
+    }
+
+    #[test]
+    fn an_empty_table_disappears() {
+        assert!(parse("<table></table>").is_empty());
+        assert!(parse("<table><tr><td></td></tr></table>").is_empty());
+    }
+
+    #[test]
+    fn table_markup_survives_sanitizing() {
+        // The analogue of `the_style_attribute_survives_sanitizing`, and a worse failure: if
+        // ammonia drops these tags every pasted table silently becomes an empty document, and if
+        // it drops `colspan` every cell after a merge shifts one column to the left.
+        let cleaned = sanitize(concat!(
+            r#"<table><caption>c</caption><colgroup><col span="2" align="right"></colgroup>"#,
+            r#"<thead><tr><th align="center" colspan="2">h</th></tr></thead>"#,
+            r#"<tbody><tr><td rowspan="2" style="text-align:left">a</td></tr></tbody>"#,
+            "<tfoot><tr><td>f</td></tr></tfoot></table>"
+        ));
+        for needle in [
+            "<table",
+            "<caption",
+            "<colgroup",
+            "<col ",
+            "<thead",
+            "<tbody",
+            "<tfoot",
+            "<tr",
+            "<th",
+            "<td",
+            "colspan",
+            "rowspan",
+            "align=",
+            "text-align",
+            "span=",
+        ] {
+            assert!(
+                cleaned.contains(needle),
+                "ammonia stripped {needle}: {cleaned}"
+            );
+        }
     }
 
     #[test]

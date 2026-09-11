@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 
+import { getScrollSync } from '../../lib/scrollSync';
 import { documentStore, useDocumentStore } from '../../stores/documentStore';
 import { createExtensions } from './extensions';
 import { pasteFromClipboard } from './paste';
+import { createRichScrollPane } from './scrollPane';
 
 /**
  * The Formatted pane.
@@ -17,6 +19,7 @@ export function RichEditor(): React.JSX.Element {
   const html = useDocumentStore((state) => state.html);
   const htmlRevision = useDocumentStore((state) => state.htmlRevision);
   const appliedRevision = useRef(-1);
+  const surface = useRef<HTMLDivElement | null>(null);
 
   const editor = useEditor({
     extensions,
@@ -42,6 +45,13 @@ export function RichEditor(): React.JSX.Element {
     },
   });
 
+  // The surface div is the scroller; the editor's own element is not scrollable.
+  useEffect(() => {
+    const scroller = surface.current;
+    if (!editor || !scroller) return;
+    return getScrollSync().attach('rich', createRichScrollPane(editor, scroller));
+  }, [editor]);
+
   useEffect(() => {
     if (!editor) return;
     if (appliedRevision.current === htmlRevision) return;
@@ -51,7 +61,11 @@ export function RichEditor(): React.JSX.Element {
   }, [editor, html, htmlRevision]);
 
   return (
-    <div className="rich-surface h-full overflow-y-auto px-6 py-4 text-ink">
+    <div
+      ref={surface}
+      data-testid="scroller-rich"
+      className="rich-surface h-full overflow-y-auto px-6 py-4 text-ink"
+    >
       <EditorContent editor={editor} className="h-full" />
     </div>
   );

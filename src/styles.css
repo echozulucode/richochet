@@ -231,8 +231,37 @@ body {
   padding: 0;
 }
 
+/*
+ * The caret, focused and unfocused.
+ *
+ * minimalSetup includes drawSelection, so the caret is a real `.cm-cursor` element in a
+ * `.cm-cursorLayer`, not the browser's native caret. CodeMirror's own theme sets
+ * `.cm-cursor { display: none }` and only un-hides it under `.cm-focused`, and it hangs the blink
+ * animation off `.cm-focused` too. So the moment you click into the Formatted pane, every trace of
+ * where you were in the Markdown disappears.
+ *
+ * Un-hiding it costs nothing and answers "where was I?". It has to read as a memory rather than an
+ * invitation, so unfocused is dimmed and hairline and explicitly not blinking; focused keeps the
+ * accent colour and the blink, and is 2px so it is findable in a wall of monospace.
+ */
 .markdown-surface .cm-cursor {
-  border-left-color: var(--accent);
+  display: block;
+  border-left: 1px solid color-mix(in srgb, var(--ink) 38%, transparent);
+  margin-left: -0.5px;
+}
+
+/*
+ * CodeMirror hangs the blink off the layer, under `.cm-focused`, so unfocused already does not
+ * blink. Saying so outright means a future theme change cannot quietly reintroduce it; the
+ * focused rule is three classes deep and still wins.
+ */
+.markdown-surface .cm-cursorLayer {
+  animation: none;
+}
+
+.markdown-surface .cm-editor.cm-focused .cm-cursor {
+  border-left: 2px solid var(--accent);
+  margin-left: -1px;
 }
 
 .markdown-surface .cm-selectionBackground,

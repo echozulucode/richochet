@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Rich message sample</title>
+    <style>
+      /* Deliberately presentational rather than semantic in places: this page exists to produce
+         the kind of span-soup a chat client emits, not to be well-written HTML. */
+      body {
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        margin: 24px;
+        max-width: 46rem;
+      }
+      .heading {
+        font-size: 20px;
+        font-weight: 600;
+        margin: 16px 0 8px;
+      }
+      .mono {
+        font-family: Consolas, 'Courier New', monospace;
+        background: #f3f3f3;
+        padding: 1px 4px;
+      }
+      pre {
+        font-family: Consolas, monospace;
+        background: #f3f3f3;
+        padding: 8px;
+      }
+      blockquote {
+        border-left: 3px solid #ccc;
+        margin: 8px 0;
+        padding-left: 12px;
+        color: #444;
+      }
+      table {
+        border-collapse: collapse;
+        margin: 12px 0;
+      }
+      th,
+      td {
+        border: 1px solid #ccc;
+        padding: 4px 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="heading">Release notes</div>
+
+    <div>
+      Some <span style="font-weight: 600">important</span> context with a
+      <a href="https://example.com/docs">link</a>, some
+      <span style="font-style: italic">emphasis</span>, something
+      <span style="text-decoration: line-through">withdrawn</span>, and
+      <span class="mono">inline code</span>.
+    </div>
+
+    <div>
+      A second paragraph in its own div, because that is how chat clients tend to write them.<br />This
+      line follows a break rather than a new paragraph.
+    </div>
+
+    <div><b>Bold containing <span style="font-weight: normal">a normal-weight run</span> inside it.</b></div>
+
+    <ul>
+      <li>First point</li>
+      <li>
+        Second point
+        <ul>
+          <li>A nested detail</li>
+          <li>Another nested detail</li>
+        </ul>
+      </li>
+      <li>Third point</li>
+    </ul>
+
+    <ol start="3">
+      <li>Third item</li>
+      <li>Fourth item</li>
+    </ol>
+
+    <blockquote>A caution worth reading, quoted from someone else.</blockquote>
+
+    <pre><code>just build
+just test</code></pre>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Component</th>
+          <th style="text-align: center">Status</th>
+          <th style="text-align: right">Owner</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Engine</td>
+          <td style="text-align: center">Done</td>
+          <td style="text-align: right">Eric</td>
+        </tr>
+        <tr>
+          <td>Clipboard</td>
+          <td style="text-align: center"><b>Blocked</b></td>
+          <td style="text-align: right">Eric</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div>Trailing text with an emoji 🎯 and a bare URL https://example.com/a_b_c to finish.</div>
+  </body>
+</html>

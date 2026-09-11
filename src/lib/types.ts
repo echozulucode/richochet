@@ -21,6 +21,12 @@ export interface ClipboardPayload {
   text: string;
 }
 
+/** What `outline` returns. Mirrors `commands::OutlinePayload`. */
+export interface OutlinePayload {
+  /** 1-based source line per top-level block, in document order. */
+  lines: number[];
+}
+
 /** What `write_clipboard` accepts. Mirrors `commands::OutboundPayload`. */
 export interface OutboundPayload {
   /** HTML representation; written alongside `text` when present. */
@@ -41,6 +47,14 @@ export type BackendName = 'tauri' | 'mock';
 export interface ConversionBackend {
   readonly name: BackendName;
   convert(input: string, from: WireFormat, to: WireFormat): Promise<string>;
+  /**
+   * Where each top-level block of a Markdown document starts, 1-based, in document order.
+   *
+   * Parallel to the document's top-level blocks, which is what lets the two panes scroll
+   * together — see `src/lib/scrollMapping.ts`. Resolves to `[]` when the mapping is unavailable;
+   * callers fall back to proportional scrolling rather than treating that as an error.
+   */
+  outline(markdown: string): Promise<number[]>;
   readClipboard(): Promise<ClipboardPayload>;
   writeClipboard(payload: OutboundPayload): Promise<void>;
 }

@@ -1,0 +1,23 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/table-pipe-in-cell/source.md
+---
+=== markdown ===
+| Expression | Meaning |
+| ---------- | ------- |
+| `a \| b`   | either  |
+
+=== teams html ===
+<table>
+<thead>
+<tr><th>Expression</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>a | b</code></td><td>either</td></tr>
+</tbody>
+</table>
+
+=== plain text ===
+Expression  Meaning
+a | b       either

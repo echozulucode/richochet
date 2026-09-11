@@ -1,4 +1,5 @@
-import { loadOracle, oracleKey } from '../oracle';
+import { loadOracle, oracleKey, outlineKey } from '../oracle';
+import { sanitizeOutline } from '../scrollMapping';
 import { bumpPending, recordClipboardWrite, takeStagedClipboard } from '../testHook';
 import type { ClipboardPayload, ConversionBackend, OutboundPayload, WireFormat } from '../types';
 
@@ -91,7 +92,7 @@ export function createMockBackend(options: MockOptions = {}): ConversionBackend 
         const oracle = await loadOracle();
         const key = oracleKey(from, to, input);
         const hit = oracle[key];
-        if (hit !== undefined) return hit;
+        if (typeof hit === 'string') return hit;
         warnOnce(
           `${from}:${to}`,
           `no oracle entry for ${from} -> ${to}; using passthrough. ` +
@@ -101,6 +102,25 @@ export function createMockBackend(options: MockOptions = {}): ConversionBackend 
       } finally {
         bumpPending(-1);
       }
+    },
+
+    /**
+     * The scroll-sync outline, from the same table.
+     *
+     * A miss is not an error and must not reject: the controller has no way to recover from a
+     * thrown scroll handler, and an empty outline is exactly the signal it already understands —
+     * "no structural anchors here, scroll proportionally instead".
+     */
+    async outline(markdown: string): Promise<number[]> {
+      const oracle = await loadOracle();
+      const hit = oracle[outlineKey(markdown)];
+      if (Array.isArray(hit)) return sanitizeOutline(hit);
+      warnOnce(
+        'outline',
+        `no oracle outline for this document; scroll sync falls back to proportional. ` +
+          `Run \`cargo run -p mdcli -- export-fixtures\` to regenerate src/test-support/oracle.json.`,
+      );
+      return [];
     },
 
     async readClipboard(): Promise<ClipboardPayload> {

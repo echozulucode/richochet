@@ -1,0 +1,66 @@
+# Spec examples Richochet knowingly does not round-trip.
+#
+# Read by `crates/mdcore/tests/commonmark.rs`. The tests assert the divergences they observe are
+# EXACTLY this list: a new one fails the build, and so does one that has been fixed but not
+# deleted from here. That makes every gap below a tracked, reviewable decision rather than a
+# silent allowance.
+#
+# Format:  <kind> <example-id> <one-line reason>
+#   kind   `html-roundtrip` — settled Markdown changed on its trip through HTML
+#          `content-loss`   — a word the spec's reference output shows was not in our plain text
+#   id     `CM-nnn`  example nnn of the CommonMark 0.31.2 spec
+#          `GFM-nnn` example nnn of the GFM 0.29 spec (extension sections only)
+# Look an id up at https://spec.commonmark.org/0.31.2/#example-nnn
+#
+# Lines marked BUG are engine defects found by this corpus, not model limitations. They are listed
+# so the suite stays green while they are triaged; delete the line with the fix.
+
+
+# --- Inline code and HTML whitespace -----------------------------------------
+# `<code>` is not `white-space: pre`, so a browser — and our HTML parser after it — collapses runs
+# of whitespace inside a code span. CommonMark treats a code span's content as verbatim, so any
+# code span whose spacing carries meaning is renormalized by the trip.
+html-roundtrip CM-331 code span containing backticks loses the spaces that padded them
+html-roundtrip CM-332 leading space inside a code span is collapsed away by HTML whitespace rules
+html-roundtrip CM-335 runs of whitespace inside a code span collapse to one space through HTML
+html-roundtrip CM-336 trailing space inside a code span is collapsed away through HTML
+html-roundtrip CM-337 runs of whitespace inside a code span collapse to one space through HTML
+html-roundtrip CM-640 two spaces inside a code span collapse to one through HTML
+# CM-138/334 were first logged as BUG; re-checked 2026-09-11 and reclassified. A code span holding
+# only collapsible whitespace disappears, which is exactly what a *browser* renders for
+# `<code> </code>` — nothing visible. Evidence it is faithful rather than broken: the same span
+# written `<code>&nbsp;</code>` survives the round trip as `` ` ` ``, because U+00A0 is not
+# collapsible in HTML and our parser collapses on ASCII whitespace only. So the content that HTML
+# can actually carry is carried.
+html-roundtrip CM-138 a code span of only collapsible whitespace renders as nothing in HTML too
+html-roundtrip CM-334 as CM-138; `<code>&nbsp;</code>` is the form that survives
+
+# --- Fenced code block edges -------------------------------------------------
+# HTML drops the newline immediately after `<pre>`, and trailing newlines before `</code></pre>`
+# are not recoverable either, so blank lines at the very start or end of a code block are lost.
+html-roundtrip CM-127 blank first line of a code block is eaten by <pre>
+html-roundtrip CM-129 blank first line of a code block is eaten by <pre>
+html-roundtrip CM-318 trailing blank lines of a code block do not survive <pre><code>
+
+# --- Link destinations -------------------------------------------------------
+# Rendering percent-encodes a destination so it is a legal href; parsing does not decode it again.
+# The link still points at the same place, and the trip is stable after the first pass — but the
+# text the user sees in the Markdown pane is rewritten once.
+html-roundtrip CM-195 destination is percent-encoded on the way out and not decoded on the way back
+html-roundtrip CM-346 backtick in an autolink destination comes back percent-encoded
+html-roundtrip CM-489 space in an angle-bracket destination comes back percent-encoded
+html-roundtrip CM-504 quotes in a destination come back percent-encoded
+html-roundtrip CM-507 non-breaking space keeps the title inside the destination, which gets encoded
+
+# --- Sanitized URL schemes ---------------------------------------------------
+# Clipboard HTML is untrusted, so `ammonia` strips hrefs whose scheme it does not recognize. The
+# link degrades to its own text, which is the safe failure and is deliberate.
+html-roundtrip CM-598 ammonia strips the unrecognized `a+b+c:` scheme, degrading the link to text
+html-roundtrip CM-599 ammonia strips the made-up scheme, degrading the link to text
+html-roundtrip CM-601 ammonia strips the schemeless `localhost:5001` href, degrading link to text
+
+# --- Empty link destinations: FIXED 2026-09-11 -------------------------------
+# CM-200/485/486/567 used to lose the link's text along with the link. `normalize.rs` now unwraps a
+# link with no destination into its own words instead of pruning it. Left here as a note because
+# `<a href="">text</a>` is what Word and Outlook emit for bookmark anchors, so it will come back
+# from real clipboard HTML and is worth recognising if it ever regresses.

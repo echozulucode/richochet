@@ -4,7 +4,9 @@ import { EditorState } from '@codemirror/state';
 import { EditorView, placeholder } from '@codemirror/view';
 import { minimalSetup } from 'codemirror';
 
+import { getScrollSync } from '../../lib/scrollSync';
 import { documentStore, useDocumentStore } from '../../stores/documentStore';
+import { createMarkdownScrollPane } from './scrollPane';
 
 /**
  * The Markdown pane.
@@ -12,6 +14,9 @@ import { documentStore, useDocumentStore } from '../../stores/documentStore';
  * No line numbers, no gutter, no fold markers - the Markdown is the content, not a code file.
  * Derived text arrives through markdownRevision; a full-document replace keeps the caret where
  * it was if it still fits.
+ *
+ * The CodeMirror scroller is what scrolls (the editor is pinned to the pane's height), so that is
+ * what scroll sync attaches to.
  */
 export function MarkdownEditor(): React.JSX.Element {
   const host = useRef<HTMLDivElement | null>(null);
@@ -50,8 +55,12 @@ export function MarkdownEditor(): React.JSX.Element {
     });
     view.current = instance;
     appliedRevision.current = documentStore.getState().markdownRevision;
+    // CodeMirror owns its scroller, so the test id has to be set on it after the fact.
+    instance.scrollDOM.dataset.testid = 'scroller-markdown';
+    const detachSync = getScrollSync().attach('markdown', createMarkdownScrollPane(instance));
 
     return () => {
+      detachSync();
       instance.destroy();
       view.current = null;
     };

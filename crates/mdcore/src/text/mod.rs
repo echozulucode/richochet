@@ -4,7 +4,7 @@
 //! and rendering strips formatting while keeping the shape of the document readable — which is
 //! what someone pasting into a plain-text field actually wants.
 
-use crate::document::model::{Block, Document, Inline, List, ListItem};
+use crate::document::model::{Block, Document, Inline, List, ListItem, Table};
 use crate::document::visit::inline_text;
 
 /// Parse plain text into the document model.
@@ -79,7 +79,53 @@ fn render_blocks(blocks: &[Block], depth: usize, out: &mut String) {
                 push_indented("---", depth, out);
                 out.push('\n');
             }
+            Block::Table(table) => {
+                render_table(table, depth, out);
+                out.push('\n');
+            }
         }
+    }
+}
+
+/// Lay a table out as padded columns.
+///
+/// Plain text has no table syntax, so the only thing that keeps a table readable is alignment.
+/// Pipes would just be Markdown leaking into output whose whole purpose is to have no markup.
+fn render_table(table: &Table, depth: usize, out: &mut String) {
+    let columns = table.columns();
+    if columns == 0 {
+        return;
+    }
+
+    let rows: Vec<Vec<String>> = std::iter::once(&table.head)
+        .chain(table.rows.iter())
+        .filter(|row| !row.is_empty())
+        .map(|row| {
+            (0..columns)
+                .map(|i| row.get(i).map(|c| inline_text(c)).unwrap_or_default())
+                .collect()
+        })
+        .collect();
+
+    let widths: Vec<usize> = (0..columns)
+        .map(|i| rows.iter().map(|r| r[i].chars().count()).max().unwrap_or(0))
+        .collect();
+
+    for row in &rows {
+        let mut line = String::new();
+        for (i, cell) in row.iter().enumerate() {
+            if i > 0 {
+                line.push_str("  ");
+            }
+            line.push_str(cell);
+            // No trailing padding on the last column: it would be invisible whitespace.
+            if i + 1 < columns {
+                for _ in 0..widths[i].saturating_sub(cell.chars().count()) {
+                    line.push(' ');
+                }
+            }
+        }
+        push_indented(line.trim_end(), depth, out);
     }
 }
 

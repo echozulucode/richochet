@@ -4,10 +4,16 @@ expression: "report(&input, Format::Html)"
 input_file: tests/fixtures/teams-table-degrades/source.html
 ---
 === markdown ===
-a | b
+|     |     |
+| --- | --- |
+| a   | b   |
 
 === teams html ===
-<p>a | b</p>
+<table>
+<tbody>
+<tr><td>a</td><td>b</td></tr>
+</tbody>
+</table>
 
 === plain text ===
-a | b
+a  b

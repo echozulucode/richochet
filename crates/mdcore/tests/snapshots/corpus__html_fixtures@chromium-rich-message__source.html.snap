@@ -1,0 +1,102 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/chromium-rich-message/source.html
+---
+=== markdown ===
+**Release notes**
+
+Some **important** context with a [link](https://example.com/docs), some *emphasis*, something ~~withdrawn~~, and `inline code`.
+
+A second paragraph in its own div, because that is how chat clients tend to write them.\
+This line follows a break rather than a new paragraph.
+
+**Bold containing** a normal-weight run **inside it.**
+
+- First point
+- Second point
+  - A nested detail
+  - Another nested detail
+- Third point
+
+3. Third item
+4. Fourth item
+
+> A caution worth reading, quoted from someone else.
+
+```
+just build
+just test
+```
+
+| Component |   Status    | Owner |
+| --------- | :---------: | ----: |
+| Engine    |    Done     |  Eric |
+| Clipboard | **Blocked** |  Eric |
+
+Trailing text with an emoji 🎯 and a bare URL https://example.com/a_b_c to finish.
+
+=== teams html ===
+<p><strong>Release notes</strong></p>
+<p>Some <strong>important</strong> context with a <a href="https://example.com/docs">link</a>, some <em>emphasis</em>, something <s>withdrawn</s>, and <code>inline code</code>.</p>
+<p>A second paragraph in its own div, because that is how chat clients tend to write them.<br>This line follows a break rather than a new paragraph.</p>
+<p><strong>Bold containing</strong> a normal-weight run <strong>inside it.</strong></p>
+<ul>
+<li>First point</li>
+<li>Second point
+<ul>
+<li>A nested detail</li>
+<li>Another nested detail</li>
+</ul>
+</li>
+<li>Third point</li>
+</ul>
+<ol start="3">
+<li>Third item</li>
+<li>Fourth item</li>
+</ol>
+<blockquote>
+<p>A caution worth reading, quoted from someone else.</p>
+</blockquote>
+<pre><code>just build
+just test</code></pre>
+<table>
+<thead>
+<tr><th>Component</th><th style="text-align:center">Status</th><th style="text-align:right">Owner</th></tr>
+</thead>
+<tbody>
+<tr><td>Engine</td><td style="text-align:center">Done</td><td style="text-align:right">Eric</td></tr>
+<tr><td>Clipboard</td><td style="text-align:center"><strong>Blocked</strong></td><td style="text-align:right">Eric</td></tr>
+</tbody>
+</table>
+<p>Trailing text with an emoji 🎯 and a bare URL https://example.com/a_b_c to finish.</p>
+
+=== plain text ===
+Release notes
+
+Some important context with a link, some emphasis, something withdrawn, and inline code.
+
+A second paragraph in its own div, because that is how chat clients tend to write them.
+This line follows a break rather than a new paragraph.
+
+Bold containing a normal-weight run inside it.
+
+• First point
+• Second point
+  • A nested detail
+  • Another nested detail
+• Third point
+
+3. Third item
+4. Fourth item
+
+> A caution worth reading, quoted from someone else.
+
+just build
+just test
+
+Component  Status   Owner
+Engine     Done     Eric
+Clipboard  Blocked  Eric
+
+Trailing text with an emoji 🎯 and a bare URL https://example.com/a_b_c to finish.

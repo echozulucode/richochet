@@ -1,0 +1,19 @@
+Release notes
+Some important context with a link, some emphasis, something withdrawn, and inline code.
+A second paragraph in its own div, because that is how chat clients tend to write them.
+This line follows a break rather than a new paragraph.
+Bold containing a normal-weight run inside it.
+First point
+Second point
+A nested detail
+Another nested detail
+Third point
+Third item
+Fourth item
+A caution worth reading, quoted from someone else.
+just build
+just test
+Component	Status	Owner
+Engine	Done	Eric
+Clipboard	Blocked	Eric
+Trailing text with an emoji 🎯 and a bare URL https://example.com/a_b_c to finish.

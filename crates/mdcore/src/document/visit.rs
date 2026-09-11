@@ -14,6 +14,13 @@ pub fn walk_inlines<F: FnMut(&Inline)>(blocks: &[Block], f: &mut F) {
                     walk_inlines(&item.blocks, f);
                 }
             }
+            Block::Table(t) => {
+                for row in std::iter::once(&t.head).chain(t.rows.iter()) {
+                    for cell in row {
+                        walk_inline_slice(cell, f);
+                    }
+                }
+            }
             Block::CodeBlock { .. } | Block::ThematicBreak => {}
         }
     }

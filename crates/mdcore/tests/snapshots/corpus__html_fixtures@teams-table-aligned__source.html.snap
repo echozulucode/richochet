@@ -1,0 +1,23 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-table-aligned/source.html
+---
+=== markdown ===
+| L   |  C  |   R |
+| :-- | :-: | --: |
+| 1   |  2  |   3 |
+
+=== teams html ===
+<table>
+<thead>
+<tr><th style="text-align:left">L</th><th style="text-align:center">C</th><th style="text-align:right">R</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align:left">1</td><td style="text-align:center">2</td><td style="text-align:right">3</td></tr>
+</tbody>
+</table>
+
+=== plain text ===
+L  C  R
+1  2  3

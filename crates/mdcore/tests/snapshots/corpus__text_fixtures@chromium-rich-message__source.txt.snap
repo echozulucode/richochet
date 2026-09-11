@@ -1,0 +1,49 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Text)"
+input_file: tests/fixtures/chromium-rich-message/source.txt
+---
+=== markdown ===
+Release notes\
+Some important context with a link, some emphasis, something withdrawn, and inline code.\
+A second paragraph in its own div, because that is how chat clients tend to write them.\
+This line follows a break rather than a new paragraph.\
+Bold containing a normal-weight run inside it.\
+First point\
+Second point\
+A nested detail\
+Another nested detail\
+Third point\
+Third item\
+Fourth item\
+A caution worth reading, quoted from someone else.\
+just build\
+just test\
+Component Status Owner\
+Engine Done Eric\
+Clipboard Blocked Eric\
+Trailing text with an emoji 🎯 and a bare URL https://example.com/a_b_c to finish.
+
+=== teams html ===
+<p>Release notes<br>Some important context with a link, some emphasis, something withdrawn, and inline code.<br>A second paragraph in its own div, because that is how chat clients tend to write them.<br>This line follows a break rather than a new paragraph.<br>Bold containing a normal-weight run inside it.<br>First point<br>Second point<br>A nested detail<br>Another nested detail<br>Third point<br>Third item<br>Fourth item<br>A caution worth reading, quoted from someone else.<br>just build<br>just test<br>Component Status Owner<br>Engine Done Eric<br>Clipboard Blocked Eric<br>Trailing text with an emoji 🎯 and a bare URL https://example.com/a_b_c to finish.</p>
+
+=== plain text ===
+Release notes
+Some important context with a link, some emphasis, something withdrawn, and inline code.
+A second paragraph in its own div, because that is how chat clients tend to write them.
+This line follows a break rather than a new paragraph.
+Bold containing a normal-weight run inside it.
+First point
+Second point
+A nested detail
+Another nested detail
+Third point
+Third item
+Fourth item
+A caution worth reading, quoted from someone else.
+just build
+just test
+Component Status Owner
+Engine Done Eric
+Clipboard Blocked Eric
+Trailing text with an emoji 🎯 and a bare URL https://example.com/a_b_c to finish.

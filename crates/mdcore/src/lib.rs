@@ -19,7 +19,7 @@ pub mod markdown;
 pub mod profile;
 pub mod text;
 
-pub use document::model::{Block, Document, Inline, List, ListItem};
+pub use document::model::{Alignment, Block, Cell, Document, Inline, List, ListItem, Row, Table};
 pub use profile::RenderProfile;
 
 /// A wire format the engine can read from and write to.
@@ -65,6 +65,29 @@ pub fn convert_with(
 ) -> Result<String, ConvertError> {
     let doc = parse(input, from)?;
     Ok(render(&doc, to, profile))
+}
+
+/// A parsed document alongside where each top-level block came from in the source.
+///
+/// This is what makes the two panes scroll together. The rendered pane has no idea what line
+/// anything came from, but its top-level nodes correspond one-for-one with `document.blocks`, so
+/// mapping a block index to a source line is enough to align them — the same trick VS Code's
+/// Markdown preview uses.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Outline {
+    /// The parsed, normalized document.
+    pub document: Document,
+    /// Parallel to `document.blocks`: the 1-based source line each block began on.
+    ///
+    /// Stays aligned with `blocks` because blocks the normalizer drops have their line dropped
+    /// with them.
+    pub lines: Vec<u32>,
+}
+
+/// Parse Markdown, keeping the source line each top-level block started on.
+pub fn outline(markdown: &str) -> Outline {
+    crate::markdown::outline(markdown)
 }
 
 /// Parse `input` in the given format into the document model.

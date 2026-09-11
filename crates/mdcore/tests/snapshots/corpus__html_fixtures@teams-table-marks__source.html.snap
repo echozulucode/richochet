@@ -1,0 +1,19 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-table-marks/source.html
+---
+=== markdown ===
+|          |                             |
+| -------- | --------------------------- |
+| **bold** | [link](https://example.com) |
+
+=== teams html ===
+<table>
+<tbody>
+<tr><td><strong>bold</strong></td><td><a href="https://example.com">link</a></td></tr>
+</tbody>
+</table>
+
+=== plain text ===
+bold  link

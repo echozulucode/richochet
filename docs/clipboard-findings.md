@@ -142,6 +142,42 @@ What `RenderProfile::teams()` must be changed to, and why. Each change needs a f
 | `nested_lists` | `Native`        |          |                    |
 | `blockquote`   | `Blockquote`    |          |                    |
 
+## 4b. Chromium proxy observations (not Teams)
+
+Teams Desktop is a WebView2 app, so its clipboard HTML is Chromium's. While Teams is unavailable,
+`just capture-web <name>` copies a sample page out of a real headed Chromium and captures the
+genuine bytes. **This is a proxy for what Teams emits and says nothing about what Teams accepts.**
+Everything here must be re-confirmed against a real Teams window before it is treated as a finding.
+
+Captured 2026-09-11 (`tests/fixtures/chromium-rich-message`), 9 clipboard formats:
+
+| Format | Bytes | Note |
+|---|---|---|
+| `HTML Format` | 7223 | the fragment itself is ~1.2 kB; the rest is inlined computed style |
+| `CF_UNICODETEXT` | 1254 | plain-text fallback |
+| `CF_TEXT` / `CF_OEMTEXT` | 627 | ANSI fallbacks |
+| `Chromium internal source URL` | 75 | Chromium-private |
+| `Chromium internal source RFH token` | 24 | Chromium-private |
+| `CanIncludeInClipboardHistory` | 4 | Windows clipboard-history opt-in |
+| `CanUploadToCloudClipboard` | 4 | Windows cloud-clipboard opt-in |
+| `CF_LOCALE` | 4 | |
+
+What it showed:
+
+- The CF_HTML header carries an extra **`SourceURL:`** field. Our decoder tolerates it; a stricter
+  one would not.
+- Chromium inlines the **entire computed style** onto every element — `font-style: normal`,
+  `text-decoration-thickness: initial`, `color`, `font-family`, `letter-spacing` and more. Style
+  inference has to ignore all of that noise without accidentally cancelling a real mark. It does:
+  a `font-weight: normal` span nested inside bold still correctly splits the bold around it.
+- Marks, links, hard breaks, two-level nested lists, an ordered list with `start="3"`, blockquotes,
+  code blocks, and a table with per-column alignment and a bold cell all converted correctly.
+- **One gap.** A heading written as a styled `<div>` (`font-size: 20px; font-weight: 600`) converts
+  to **bold text, not a heading** — the parser infers marks from inline style but never infers
+  block level from font size. Whether that matters depends entirely on how Teams marks up its
+  headings, which is question 2 in the capture matrix above. Do not "fix" this before measuring:
+  inferring headings from font size would misread every merely-large piece of text as a heading.
+
 ## 5. Desktop vs Web divergence
 
 Anything that behaves differently between the two clients. If this section is non-empty,

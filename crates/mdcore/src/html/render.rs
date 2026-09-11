@@ -5,7 +5,7 @@
 //! Teams drops `<blockquote>` or flattens nested `<ul>`, the fix is a different struct literal and
 //! a fixture, not a rewrite of this file.
 
-use crate::document::model::{Block, Document, Inline, List};
+use crate::document::model::{Alignment, Block, Document, Inline, List, Row, Table};
 use crate::profile::{
     CodeBlockStrategy, HeadingStrategy, MarkStyle, NestingStrategy, QuoteStrategy, RenderProfile,
 };
@@ -73,6 +73,7 @@ impl Renderer<'_> {
             Block::List(list) => self.list(list, ctx),
             Block::BlockQuote(inner) => self.block_quote(inner, ctx),
             Block::CodeBlock { lang, code } => self.code_block(lang.as_deref(), code),
+            Block::Table(table) => self.table(table),
             Block::ThematicBreak => {
                 self.push("<hr>");
                 self.line_break();
@@ -167,6 +168,71 @@ impl Renderer<'_> {
                 self.push("</div>");
             }
         }
+        self.line_break();
+    }
+
+    // -----------------------------------------------------------------------------------------
+    // Tables
+    // -----------------------------------------------------------------------------------------
+
+    /// Render a table as real `<table>` markup.
+    ///
+    /// Alignment is written as an inline `style="text-align:..."` rather than as a class. A
+    /// clipboard payload travels without a stylesheet, so a class is a promise the receiving
+    /// application cannot keep; `text-align` is understood as-is by mail clients and chat
+    /// composers, which is the only place this output is ever read.
+    ///
+    /// Deliberately carries no quote prefix: under [`QuoteStrategy::TextPrefix`] a `&gt; ` in
+    /// every cell would be noise rather than quotation, the same reason a code block skips it.
+    fn table(&mut self, table: &Table) {
+        let columns = table.columns();
+        if columns == 0 {
+            return;
+        }
+
+        self.push("<table>");
+        self.line_break();
+        // An empty header is not written out at all: `<thead>` with blank cells reads as a real
+        // but nameless header row, where no `<thead>` reads as a table that has none.
+        if !table.head.is_empty() {
+            self.push("<thead>");
+            self.line_break();
+            self.table_row(&table.head, "th", table, columns);
+            self.push("</thead>");
+            self.line_break();
+        }
+        if !table.rows.is_empty() {
+            self.push("<tbody>");
+            self.line_break();
+            for row in &table.rows {
+                self.table_row(row, "td", table, columns);
+            }
+            self.push("</tbody>");
+            self.line_break();
+        }
+        self.push("</table>");
+        self.line_break();
+    }
+
+    /// One `<tr>`, padded out to `columns` so that a ragged row still renders rectangular.
+    ///
+    /// The model tolerates ragged rows because HTML in the wild is ragged; HTML rendering does
+    /// not, because a short row would silently borrow the next column's alignment and pull the
+    /// table's shape apart.
+    fn table_row(&mut self, row: &Row, tag: &str, table: &Table, columns: usize) {
+        self.push("<tr>");
+        for column in 0..columns {
+            self.push(&format!("<{tag}"));
+            if let Some(css) = align_style(table.alignment(column)) {
+                self.push(&format!(" style=\"text-align:{css}\""));
+            }
+            self.push(">");
+            if let Some(cell) = row.get(column) {
+                self.inlines(cell);
+            }
+            self.push(&format!("</{tag}>"));
+        }
+        self.push("</tr>");
         self.line_break();
     }
 
@@ -364,6 +430,17 @@ impl Renderer<'_> {
     }
 }
 
+/// The `text-align` keyword for an alignment, or `None` when the model has no opinion and the
+/// cell should carry no `style` at all.
+fn align_style(alignment: Alignment) -> Option<&'static str> {
+    match alignment {
+        Alignment::None => None,
+        Alignment::Left => Some("left"),
+        Alignment::Center => Some("center"),
+        Alignment::Right => Some("right"),
+    }
+}
+
 // -------------------------------------------------------------------------------------------
 // Escaping
 // -------------------------------------------------------------------------------------------
@@ -532,11 +609,13 @@ mod tests {
 
     #[test]
     fn unsupported_blocks_render_their_fallback() {
+        // Not a table: tables are represented now. This is the shape a Loop component or an
+        // embedded card still arrives in.
         let got = std_render(vec![Block::Unsupported {
-            kind: "table".to_string(),
-            fallback: vec![Inline::text("a | b")],
+            kind: "loop-component".to_string(),
+            fallback: vec![Inline::text("a shared list")],
         }]);
-        assert_eq!(got, "<p>a | b</p>");
+        assert_eq!(got, "<p>a shared list</p>");
     }
 
     // ---------------------------------------------------------------------------------------
@@ -651,6 +730,131 @@ mod tests {
                 code: "x".to_string(),
             }]),
             "<pre><code>x</code></pre>"
+        );
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Tables
+    // ---------------------------------------------------------------------------------------
+
+    fn cell(text: &str) -> Vec<Inline> {
+        vec![Inline::text(text)]
+    }
+
+    #[test]
+    fn a_table_with_a_header_emits_thead_and_tbody() {
+        let got = std_render(vec![Block::Table(Table {
+            head: vec![cell("H1"), cell("H2")],
+            align: vec![],
+            rows: vec![vec![cell("a"), cell("b")]],
+        })]);
+        assert_eq!(
+            got,
+            concat!(
+                "<table><thead><tr><th>H1</th><th>H2</th></tr></thead>",
+                "<tbody><tr><td>a</td><td>b</td></tr></tbody></table>"
+            )
+        );
+    }
+
+    #[test]
+    fn a_table_without_a_header_emits_no_thead() {
+        let got = std_render(vec![Block::Table(Table {
+            head: vec![],
+            align: vec![],
+            rows: vec![vec![cell("a")], vec![cell("b")]],
+        })]);
+        assert_eq!(
+            got,
+            "<table><tbody><tr><td>a</td></tr><tr><td>b</td></tr></tbody></table>"
+        );
+    }
+
+    #[test]
+    fn alignment_is_an_inline_style_on_every_cell_of_the_column() {
+        let got = std_render(vec![Block::Table(Table {
+            head: vec![cell("l"), cell("c"), cell("r"), cell("n")],
+            align: vec![
+                Alignment::Left,
+                Alignment::Center,
+                Alignment::Right,
+                Alignment::None,
+            ],
+            rows: vec![vec![cell("1"), cell("2"), cell("3"), cell("4")]],
+        })]);
+        assert_eq!(
+            got,
+            concat!(
+                "<table><thead><tr>",
+                "<th style=\"text-align:left\">l</th>",
+                "<th style=\"text-align:center\">c</th>",
+                "<th style=\"text-align:right\">r</th>",
+                // `Alignment::None` emits nothing at all.
+                "<th>n</th>",
+                "</tr></thead><tbody><tr>",
+                "<td style=\"text-align:left\">1</td>",
+                "<td style=\"text-align:center\">2</td>",
+                "<td style=\"text-align:right\">3</td>",
+                "<td>4</td>",
+                "</tr></tbody></table>"
+            )
+        );
+    }
+
+    #[test]
+    fn ragged_rows_are_padded_to_the_widest_one() {
+        let got = std_render(vec![Block::Table(Table {
+            head: vec![cell("a")],
+            align: vec![],
+            rows: vec![vec![cell("b"), cell("c"), cell("d")], vec![cell("e")]],
+        })]);
+        assert_eq!(
+            got,
+            concat!(
+                "<table><thead><tr><th>a</th><th></th><th></th></tr></thead>",
+                "<tbody><tr><td>b</td><td>c</td><td>d</td></tr>",
+                "<tr><td>e</td><td></td><td></td></tr></tbody></table>"
+            )
+        );
+    }
+
+    #[test]
+    fn cell_content_is_ordinary_inline_content() {
+        let got = std_render(vec![Block::Table(Table {
+            head: vec![],
+            align: vec![],
+            rows: vec![vec![vec![
+                Inline::bold("b"),
+                Inline::text(" & "),
+                Inline::link("https://example.com", "x"),
+            ]]],
+        })]);
+        assert_eq!(
+            got,
+            concat!(
+                "<table><tbody><tr><td><strong>b</strong> &amp; ",
+                "<a href=\"https://example.com\">x</a></td></tr></tbody></table>"
+            )
+        );
+    }
+
+    #[test]
+    fn pretty_breaks_a_table_across_lines() {
+        let profile = RenderProfile::standard().pretty();
+        let got = render(
+            &doc(vec![Block::Table(Table {
+                head: vec![cell("h")],
+                align: vec![],
+                rows: vec![vec![cell("a")]],
+            })]),
+            &profile,
+        );
+        assert_eq!(
+            got,
+            concat!(
+                "<table>\n<thead>\n<tr><th>h</th></tr>\n</thead>\n",
+                "<tbody>\n<tr><td>a</td></tr>\n</tbody>\n</table>"
+            )
         );
     }
 
@@ -808,6 +1012,32 @@ mod tests {
                 Inline::HardBreak,
                 Inline::text("next line"),
             ])]),
+            // Tables round trip only when they are already rectangular: the renderer pads a
+            // ragged row out to `columns()`, and the parser has no way to know the padding was
+            // not in the source. Alignment must likewise be canonical — the parser drops trailing
+            // `Alignment::None`s, because `Table::alignment` defaults for a short `align`.
+            doc(vec![Block::Table(Table {
+                head: vec![cell("Name"), cell("Qty"), cell("Notes")],
+                align: vec![Alignment::None, Alignment::Right],
+                rows: vec![
+                    vec![cell("widget"), cell("3"), cell("in stock")],
+                    vec![
+                        vec![Inline::bold("gadget")],
+                        cell("1"),
+                        vec![Inline::link("https://example.com/g", "spec")],
+                    ],
+                ],
+            })]),
+            doc(vec![Block::Table(Table {
+                head: vec![],
+                align: vec![Alignment::Center, Alignment::Left],
+                rows: vec![vec![cell("a"), cell("b")], vec![cell("c"), cell("d")]],
+            })]),
+            doc(vec![Block::Table(Table {
+                head: vec![cell("one")],
+                align: vec![],
+                rows: vec![vec![vec![Inline::Code("x < y".to_string())]]],
+            })]),
         ]
     }
 

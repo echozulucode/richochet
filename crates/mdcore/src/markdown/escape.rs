@@ -33,6 +33,10 @@
 //! is already escaped or already impossible. `!` in particular is harmless because `[` is always
 //! escaped, so `![` can never form an image.
 //!
+//! `|` is the one character with a context of its own: inside a GFM table it separates cells, and
+//! it does so *before* any inline parsing happens. [`escape_table_cell`] handles that, and it runs
+//! over a cell that has already been rendered rather than over a single text node — see its docs.
+//!
 //! Every character escaped here is ASCII punctuation, which is exactly the set CommonMark allows a
 //! backslash escape to apply to.
 
@@ -141,6 +145,40 @@ pub fn escape_line_start(text: &str) -> String {
     }
 }
 
+/// Make an already-rendered inline run safe to sit inside a GFM table cell.
+///
+/// Unlike [`escape_inline`] and [`escape_line_start`], this takes **rendered Markdown**, not the
+/// text of one node, because the two things a cell must survive are decided before inline parsing
+/// ever runs:
+///
+/// * **`|` splits the row.** GFM scans a table row for unescaped pipes and only then parses each
+///   cell's inlines, so a pipe needs its backslash even where it would otherwise be inert — inside
+///   a code span, inside a link destination, inside a link title. Escaping per text node would
+///   miss every one of those, so the pass runs over the finished cell instead. A backslash the
+///   inline pass already emitted is never touched, so `\|` in the source stays `\\\|` here: a
+///   literal backslash followed by a literal pipe.
+/// * **A newline ends the row.** A table row is exactly one line, so any line ending that reaches
+///   a cell becomes a space. Callers should have flattened breaks already; this is the backstop.
+///
+/// ```
+/// use mdcore::markdown::escape::escape_table_cell;
+///
+/// assert_eq!(escape_table_cell("a | b"), r"a \| b");
+/// assert_eq!(escape_table_cell("`a|b`"), r"`a\|b`");
+/// assert_eq!(escape_table_cell("a\nb"), "a b");
+/// ```
+pub fn escape_table_cell(rendered: &str) -> String {
+    let mut out = String::with_capacity(rendered.len());
+    for c in rendered.chars() {
+        match c {
+            '|' => out.push_str("\\|"),
+            '\n' | '\r' => out.push(' '),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,5 +276,36 @@ mod tests {
     #[test]
     fn a_hash_that_is_not_at_line_start_is_left_alone() {
         assert_eq!(escape_inline("still #1"), "still #1");
+    }
+
+    // ---- table cells --------------------------------------------------------------------------
+
+    #[test]
+    fn a_pipe_in_a_table_cell_is_escaped() {
+        assert_eq!(escape_table_cell("a|b"), r"a\|b");
+        assert_eq!(escape_table_cell("|"), r"\|");
+    }
+
+    #[test]
+    fn a_pipe_inside_a_code_span_is_escaped_too() {
+        // GFM splits the row before it parses inlines, so the code span offers no protection.
+        assert_eq!(escape_table_cell("`a|b`"), r"`a\|b`");
+    }
+
+    #[test]
+    fn an_already_escaped_backslash_is_not_disturbed() {
+        // `\\` (a literal backslash from the inline pass) followed by a pipe becomes `\\` + `\|`.
+        assert_eq!(escape_table_cell(r"\\|"), r"\\\|");
+    }
+
+    #[test]
+    fn line_endings_in_a_cell_become_spaces() {
+        assert_eq!(escape_table_cell("a\nb"), "a b");
+        assert_eq!(escape_table_cell("a\r\nb"), "a  b");
+    }
+
+    #[test]
+    fn a_cell_with_nothing_dangerous_is_untouched() {
+        assert_eq!(escape_table_cell(r"**bold** \_x\_"), r"**bold** \_x\_");
     }
 }

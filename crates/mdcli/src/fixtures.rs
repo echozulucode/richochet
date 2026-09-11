@@ -12,8 +12,12 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use mdcore::{Format, RenderProfile};
 
-/// One conversion the frontend may be asked to perform, keyed by `"<from>:<to>:<input>"`.
-type Oracle = BTreeMap<String, String>;
+/// What the frontend may ask the engine for, precomputed.
+///
+/// Conversions are keyed `"<from>:<to>:<input>"` and hold a string. Outlines are keyed
+/// `"outline:<markdown>"` and hold an array of source line numbers — the scroll-sync map. One flat
+/// table with mixed value types keeps the frontend's lookup a single code path.
+type Oracle = BTreeMap<String, serde_json::Value>;
 
 fn key(from: Format, to: Format, input: &str) -> String {
     format!("{}:{}:{}", fmt_name(from), fmt_name(to), input)
@@ -27,6 +31,13 @@ fn fmt_name(f: Format) -> &'static str {
     }
 }
 
+/// A document long enough to actually scroll, for the scroll-sync specs.
+///
+/// 24 top-level blocks over 60 source lines, one of them a 12-line code block so the two panes
+/// have genuinely different heights — the case proportional scrolling gets wrong. Must match
+/// `SCROLL_SAMPLE` in `e2e/support.ts` byte for byte.
+const SCROLL_SAMPLE: &str = "# Block 01 heading\n\nBlock 02 paragraph text.\n\nBlock 03 paragraph text.\n\n```text\nBlock 04 code line 01\nBlock 04 code line 02\nBlock 04 code line 03\nBlock 04 code line 04\nBlock 04 code line 05\nBlock 04 code line 06\nBlock 04 code line 07\nBlock 04 code line 08\nBlock 04 code line 09\nBlock 04 code line 10\nBlock 04 code line 11\nBlock 04 code line 12\n```\n\nBlock 05 paragraph text.\n\nBlock 06 paragraph text.\n\nBlock 07 paragraph text.\n\nBlock 08 paragraph text.\n\nBlock 09 paragraph text.\n\nBlock 10 paragraph text.\n\nBlock 11 paragraph text.\n\nBlock 12 paragraph text.\n\nBlock 13 paragraph text.\n\nBlock 14 paragraph text.\n\nBlock 15 paragraph text.\n\nBlock 16 paragraph text.\n\nBlock 17 paragraph text.\n\nBlock 18 paragraph text.\n\nBlock 19 paragraph text.\n\nBlock 20 paragraph text.\n\nBlock 21 paragraph text.\n\nBlock 22 paragraph text.\n\nBlock 23 paragraph text.\n\nBlock 24 paragraph text.";
+
 /// Markdown the Playwright specs type into the Markdown pane.
 const E2E_INPUTS: &[&str] = &[
     "**Hello Eric**",
@@ -38,6 +49,7 @@ const E2E_INPUTS: &[&str] = &[
     "abcdef",
     "typed",
     "the quick brown fox jumps over the lazy dog",
+    SCROLL_SAMPLE,
 ];
 
 /// HTML the specs stage on the clipboard before a simulated paste.
@@ -105,8 +117,18 @@ pub fn export(out: &Path) -> Result<()> {
                 continue;
             }
             let rendered = mdcore::convert_with(input, *pf, *pt, &profile)?;
-            oracle.insert(key(*pf, *pt, input), rendered);
+            oracle.insert(key(*pf, *pt, input), serde_json::Value::from(rendered));
         }
+    }
+
+    // The scroll-sync map: which source line each top-level block starts on. Only Markdown has
+    // one — it is the only format the user scrolls as text.
+    for (from, input) in &inputs {
+        if *from != Format::Markdown {
+            continue;
+        }
+        let lines = mdcore::outline(input).lines;
+        oracle.insert(format!("outline:{input}"), serde_json::Value::from(lines));
     }
 
     if let Some(parent) = out.parent() {

@@ -24,6 +24,7 @@ function deferredBackend(): { backend: ConversionBackend; calls: PendingCall[] }
         calls.push({ input, from, to, resolve, reject });
       });
     },
+    outline: () => Promise.resolve([]),
     readClipboard() {
       return Promise.resolve({ kind: 'text', html: null, rtf: null, text: '' });
     },

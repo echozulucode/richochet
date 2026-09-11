@@ -10,6 +10,7 @@ function backendFor(payload: ClipboardPayload): ConversionBackend {
   return {
     name: 'mock',
     convert: vi.fn((input: string, from) => Promise.resolve(`${from}->md:${input}`)),
+    outline: () => Promise.resolve([]),
     readClipboard: () => Promise.resolve(payload),
     writeClipboard: () => Promise.resolve(),
   };
@@ -62,6 +63,7 @@ describe('pasteFromClipboard', () => {
     setBackend({
       name: 'mock',
       convert: () => Promise.resolve(''),
+      outline: () => Promise.resolve([]),
       readClipboard: () => Promise.reject(new Error('clipboard busy')),
       writeClipboard: () => Promise.resolve(),
     });

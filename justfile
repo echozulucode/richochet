@@ -79,6 +79,14 @@ clipdump:
 capture NAME:
     cargo run -q -p mdcli -- capture --name {{NAME}}
 
+# Teams Desktop is a WebView2 app, so HTML copied out of Chromium is the closest proxy for what
+# Teams emits. A proxy only: it says nothing about what Teams *accepts*, which needs Phase 1.
+
+# Copy a sample page out of a real browser and capture it as a fixture
+capture-web NAME FILE="tools/web-samples/rich-message.html":
+    node tools/capture-web.mjs {{FILE}}
+    cargo run -q -p mdcli -- capture --name {{NAME}}
+
 clean:
     cargo clean
     pnpm exec rimraf dist node_modules/.vite test-results playwright-report

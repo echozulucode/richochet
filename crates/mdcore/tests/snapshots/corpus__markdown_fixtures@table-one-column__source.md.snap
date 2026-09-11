@@ -1,0 +1,23 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Markdown)"
+input_file: tests/fixtures/table-one-column/source.md
+---
+=== markdown ===
+| Only |
+| ---- |
+| one  |
+
+=== teams html ===
+<table>
+<thead>
+<tr><th>Only</th></tr>
+</thead>
+<tbody>
+<tr><td>one</td></tr>
+</tbody>
+</table>
+
+=== plain text ===
+Only
+one

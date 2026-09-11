@@ -21,6 +21,10 @@ export interface TestHook {
   clipboardWrites: Array<{ html: string | null; text: string }>;
   /** How many times the mock `read_clipboard` has been called. */
   clipboardReads: number;
+  /** The scroll-sync outline in use: 1-based source line per top-level block. */
+  outlineLines: number[];
+  /** How many outline responses have been applied. Lets a spec wait for a fresh one. */
+  outlineRevision: number;
   /** Stage what the next `read_clipboard` should return. */
   stageClipboard(payload: StagedClipboard): void;
 }
@@ -50,6 +54,8 @@ export function installTestHook(backend: string): TestHook {
     backend,
     clipboardWrites: [],
     clipboardReads: 0,
+    outlineLines: [],
+    outlineRevision: 0,
     stageClipboard(payload: StagedClipboard) {
       staged = {
         kind: payload.kind,

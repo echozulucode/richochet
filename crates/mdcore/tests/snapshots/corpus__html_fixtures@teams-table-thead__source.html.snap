@@ -1,0 +1,23 @@
+---
+source: crates/mdcore/tests/corpus.rs
+expression: "report(&input, Format::Html)"
+input_file: tests/fixtures/teams-table-thead/source.html
+---
+=== markdown ===
+| Component | Status |
+| --------- | ------ |
+| Engine    | Done   |
+
+=== teams html ===
+<table>
+<thead>
+<tr><th>Component</th><th>Status</th></tr>
+</thead>
+<tbody>
+<tr><td>Engine</td><td>Done</td></tr>
+</tbody>
+</table>
+
+=== plain text ===
+Component  Status
+Engine     Done

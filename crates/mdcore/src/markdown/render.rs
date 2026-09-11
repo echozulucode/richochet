@@ -18,6 +18,11 @@
 //!   a backslash survives a round trip through anything that preserves the bytes.
 //! * **Soft breaks render as a bare newline**, and the text after one is escaped with
 //!   [`escape_line_start`] because block markers can interrupt a paragraph on a continuation line.
+//! * **Tables are padded to even columns**, with a break inside a cell collapsed to a space. The
+//!   Markdown pane is read and edited by a person, and a table whose columns do not line up is not
+//!   one; a row, meanwhile, is exactly one line, so a break has nowhere to go. `<br>` would keep
+//!   the break but is raw HTML that the Markdown parser reads back as literal text and the next
+//!   render escapes, so the table would visibly change on the second conversion.
 //!
 //! # Known lossy corners
 //!
@@ -31,8 +36,8 @@
 
 use std::borrow::Cow;
 
-use crate::document::model::{Block, Document, Inline, List};
-use crate::markdown::escape::{escape_inline, escape_line_start};
+use crate::document::model::{Alignment, Block, Document, Inline, List, Row, Table};
+use crate::markdown::escape::{escape_inline, escape_line_start, escape_table_cell};
 
 /// Render a document as CommonMark with GFM strikethrough.
 ///
@@ -78,10 +83,150 @@ fn render_block(block: &Block) -> String {
         Block::List(list) => render_list(list),
         Block::BlockQuote(blocks) => prefix_lines(&render_blocks(blocks), "> ", "> "),
         Block::CodeBlock { lang, code } => render_code_block(lang.as_deref(), code),
+        Block::Table(table) => render_table(table),
         // Safe next to anything because every block is preceded by a blank line, so this can never
         // be read as a setext underline for the paragraph above.
         Block::ThematicBreak => "---".to_string(),
     }
+}
+
+/// The narrowest a table column is allowed to be.
+///
+/// Three is the width of the widest delimiter cell that carries no padding (`:-:`), so every
+/// column can express any alignment without the delimiter row being wider than the data.
+const MIN_COLUMN_WIDTH: usize = 3;
+
+/// Render a GFM table, padded so the columns line up in the source.
+///
+/// The Markdown pane is something a person reads and edits, not just a serialization format, and
+/// an unpadded table is unreadable the moment two cells differ in length. The padding costs
+/// nothing on the way back in: GFM trims each cell.
+///
+/// Ragged rows — which the model deliberately allows — are padded out to
+/// [`Table::columns`] with empty cells, because a row shorter than the header row is the one
+/// shape GFM genuinely cannot express.
+fn render_table(table: &Table) -> String {
+    let columns = table.columns();
+    if columns == 0 {
+        // No header and no rows. Nothing can be written that parses as a table.
+        return String::new();
+    }
+
+    let head = render_row(&table.head, columns);
+    let body: Vec<Vec<String>> = table
+        .rows
+        .iter()
+        .map(|row| render_row(row, columns))
+        .collect();
+
+    let widths: Vec<usize> = (0..columns)
+        .map(|i| {
+            std::iter::once(&head)
+                .chain(body.iter())
+                .map(|row| display_width(&row[i]))
+                .max()
+                .unwrap_or(0)
+                .max(MIN_COLUMN_WIDTH)
+        })
+        .collect();
+
+    // GFM has no headerless table, so a table that lost its header (an HTML one with no `<thead>`)
+    // gets a row of empty cells rather than promoting its first body row and changing the meaning.
+    let mut lines = Vec::with_capacity(body.len() + 2);
+    lines.push(join_cells(
+        head.iter()
+            .enumerate()
+            .map(|(i, cell)| pad_cell(cell, widths[i], table.alignment(i))),
+    ));
+    lines.push(join_cells(
+        widths
+            .iter()
+            .enumerate()
+            .map(|(i, &w)| delimiter_cell(w, table.alignment(i))),
+    ));
+    for row in &body {
+        lines.push(join_cells(
+            row.iter()
+                .enumerate()
+                .map(|(i, cell)| pad_cell(cell, widths[i], table.alignment(i))),
+        ));
+    }
+    lines.join("\n")
+}
+
+/// Render one row's cells, padded out to `columns` with empty cells.
+fn render_row(row: &Row, columns: usize) -> Vec<String> {
+    (0..columns)
+        .map(|i| row.get(i).map(|cell| render_cell(cell)).unwrap_or_default())
+        .collect()
+}
+
+/// Render one cell's inline content onto a single line.
+///
+/// # Why a break becomes a space and not `<br>`
+///
+/// A GFM table row is one line, so an [`Inline::SoftBreak`] or [`Inline::HardBreak`] arriving from
+/// an HTML `<br>` inside a `<td>` has to turn into something. `<br>` would keep the visual break,
+/// but it is raw HTML, and [`crate::markdown::parse`] maps inline HTML back to *literal text* —
+/// so the next conversion would escape it to `\<br\>` and the user would watch their table change
+/// the moment they clicked into the other pane. A space converges on the first pass, and it is
+/// already what [`render_heading`] does with a break for exactly the same reason: the construct is
+/// single-line, so the break has nowhere to go.
+///
+/// A cell is never at the start of a line — the `|` is — so the inline escaping is used rather
+/// than [`escape_line_start`]; `- x` or `# x` in a cell is text, not a block marker.
+fn render_cell(cell: &[Inline]) -> String {
+    let mut out = String::new();
+    let mut line_start = false;
+    // Every cell is emitted surrounded by padding spaces, so a space is what really follows.
+    render_inlines(&flatten_breaks(cell), &mut out, &mut line_start, Some(' '));
+    escape_table_cell(out.trim())
+}
+
+/// Wrap a row's already-padded cells in pipes.
+fn join_cells<I: Iterator<Item = String>>(cells: I) -> String {
+    let mut out = String::from("|");
+    for cell in cells {
+        out.push(' ');
+        out.push_str(&cell);
+        out.push_str(" |");
+    }
+    out
+}
+
+/// Pad a cell to `width`, placing the slack according to the column's alignment.
+fn pad_cell(content: &str, width: usize, align: Alignment) -> String {
+    let slack = width.saturating_sub(display_width(content));
+    match align {
+        Alignment::Right => format!("{}{content}", " ".repeat(slack)),
+        Alignment::Center => {
+            let left = slack / 2;
+            format!("{}{content}{}", " ".repeat(left), " ".repeat(slack - left))
+        }
+        Alignment::None | Alignment::Left => format!("{content}{}", " ".repeat(slack)),
+    }
+}
+
+/// The delimiter-row cell for a column: dashes, with colons marking the alignment.
+///
+/// `width` is at least [`MIN_COLUMN_WIDTH`], so every form keeps at least one dash.
+fn delimiter_cell(width: usize, align: Alignment) -> String {
+    match align {
+        Alignment::None => "-".repeat(width),
+        Alignment::Left => format!(":{}", "-".repeat(width - 1)),
+        Alignment::Right => format!("{}:", "-".repeat(width - 1)),
+        Alignment::Center => format!(":{}:", "-".repeat(width - 2)),
+    }
+}
+
+/// How wide a rendered cell is, for padding purposes.
+///
+/// Counted in `char`s, which is exact for the Latin text that dominates and wrong for East Asian
+/// double-width characters and combining marks. The cost of being wrong is a column of source that
+/// looks slightly ragged; no parser cares. A correct answer would mean a Unicode width table, and
+/// this crate is deliberately dependency-light.
+fn display_width(s: &str) -> usize {
+    s.chars().count()
 }
 
 /// Render an ATX heading.
@@ -698,6 +843,292 @@ mod tests {
             }]),
             "a | b"
         );
+    }
+
+    // ---- tables -----------------------------------------------------------------------------
+
+    fn cell(s: &str) -> Vec<Inline> {
+        vec![text(s)]
+    }
+
+    fn row(cells: &[&str]) -> Row {
+        cells.iter().map(|c| cell(c)).collect()
+    }
+
+    /// Render a table straight from the model, without normalization, so shapes the parser cannot
+    /// produce (ragged rows, a missing header) can be tested.
+    fn raw_table(table: Table) -> String {
+        render(&Document {
+            blocks: vec![Block::Table(table)],
+        })
+    }
+
+    #[test]
+    fn a_table_is_padded_so_the_columns_line_up() {
+        assert_eq!(
+            raw_table(Table {
+                head: row(&["name", "n"]),
+                align: vec![],
+                rows: vec![row(&["a much longer cell", "1"])],
+            }),
+            "\
+| name               | n   |
+| ------------------ | --- |
+| a much longer cell | 1   |"
+        );
+    }
+
+    #[test]
+    fn a_narrow_column_still_gets_three_dashes() {
+        // Anything narrower cannot carry `:-:`, and a delimiter row wider than its data reads as a
+        // mistake.
+        assert_eq!(
+            raw_table(Table {
+                head: row(&["a"]),
+                align: vec![],
+                rows: vec![row(&["b"])],
+            }),
+            "| a   |\n| --- |\n| b   |"
+        );
+    }
+
+    #[test]
+    fn alignment_becomes_colons_and_moves_the_padding() {
+        assert_eq!(
+            raw_table(Table {
+                head: row(&["l", "c", "r", "n"]),
+                align: vec![
+                    Alignment::Left,
+                    Alignment::Center,
+                    Alignment::Right,
+                    Alignment::None,
+                ],
+                rows: vec![row(&[
+                    "wide left",
+                    "wide centre",
+                    "wide right",
+                    "wide none"
+                ])],
+            }),
+            "\
+| l         |      c      |          r | n         |
+| :-------- | :---------: | ---------: | --------- |
+| wide left | wide centre | wide right | wide none |"
+        );
+    }
+
+    #[test]
+    fn alignment_round_trips_through_a_reparse() {
+        let original = doc(vec![Block::Table(Table {
+            head: row(&["l", "c", "r", "n"]),
+            align: vec![
+                Alignment::Left,
+                Alignment::Center,
+                Alignment::Right,
+                Alignment::None,
+            ],
+            rows: vec![row(&["1", "2", "3", "4"])],
+        })]);
+        let once = render(&original);
+        assert_eq!(parse(&once), original, "--- rendered ---\n{once}");
+        assert_eq!(render(&parse(&once)), once);
+    }
+
+    #[test]
+    fn a_column_with_no_alignment_recorded_defaults_to_none() {
+        // `align` is allowed to be shorter than the widest row; the missing entries are `None`.
+        let out = raw_table(Table {
+            head: row(&["a", "b"]),
+            align: vec![Alignment::Right],
+            rows: vec![row(&["1", "2"])],
+        });
+        assert_eq!(out.lines().nth(1), Some("| --: | --- |"));
+    }
+
+    #[test]
+    fn a_pipe_in_a_cell_is_escaped() {
+        let out = raw_table(Table {
+            head: row(&["a | b"]),
+            align: vec![],
+            rows: vec![row(&["c|d"])],
+        });
+        assert_eq!(out, "| a \\| b |\n| ------ |\n| c\\|d   |");
+        // And it reads back as content, not as another column.
+        let reparsed = parse(&out);
+        let [Block::Table(t)] = &reparsed.blocks[..] else {
+            panic!("expected a table, got {reparsed:?}");
+        };
+        assert_eq!(t.columns(), 1);
+        assert_eq!(t.head, vec![cell("a | b")]);
+        assert_eq!(t.rows[0], vec![cell("c|d")]);
+    }
+
+    #[test]
+    fn a_pipe_inside_a_code_span_is_escaped_too() {
+        // GFM splits the row on pipes before it looks for code spans, so the backticks do not
+        // protect it.
+        let out = raw_table(Table {
+            head: vec![vec![Inline::Code("a|b".into())]],
+            align: vec![],
+            rows: vec![],
+        });
+        assert_eq!(out, "| `a\\|b` |\n| ------ |");
+        let reparsed = parse(&out);
+        let [Block::Table(t)] = &reparsed.blocks[..] else {
+            panic!("expected a table, got {reparsed:?}");
+        };
+        assert_eq!(t.head, vec![vec![Inline::Code("a|b".into())]]);
+    }
+
+    #[test]
+    fn ragged_rows_are_padded_out_to_the_widest_row() {
+        // The model tolerates ragged rows because HTML tables in the wild are; GFM does not, so a
+        // short row is filled with empty cells rather than shifting the columns.
+        assert_eq!(
+            raw_table(Table {
+                head: row(&["a"]),
+                align: vec![],
+                rows: vec![row(&["1", "2", "3"]), row(&["x"])],
+            }),
+            "\
+| a   |     |     |
+| --- | --- | --- |
+| 1   | 2   | 3   |
+| x   |     |     |"
+        );
+    }
+
+    #[test]
+    fn an_empty_header_still_emits_a_header_row_so_the_output_parses() {
+        // GFM has no headerless table. Promoting the first body row would change the document, so
+        // an empty header row goes out instead.
+        let out = raw_table(Table {
+            head: vec![],
+            align: vec![],
+            rows: vec![row(&["a", "b"]), row(&["c", "d"])],
+        });
+        assert_eq!(
+            out,
+            "|     |     |\n| --- | --- |\n| a   | b   |\n| c   | d   |"
+        );
+
+        let reparsed = parse(&out);
+        let [Block::Table(t)] = &reparsed.blocks[..] else {
+            panic!("expected a table, got {reparsed:?}");
+        };
+        assert_eq!(t.rows.len(), 2, "no body row was eaten by the header");
+        assert_eq!(t.rows[0], row(&["a", "b"]));
+    }
+
+    #[test]
+    fn a_table_with_nothing_in_it_renders_to_nothing() {
+        assert_eq!(raw_table(Table::default()), "");
+    }
+
+    #[test]
+    fn cells_carry_inline_marks_a_link_and_code() {
+        assert_eq!(
+            raw_table(Table {
+                head: vec![
+                    vec![Inline::bold("bold")],
+                    vec![Inline::italic("it")],
+                    vec![Inline::Strike(vec![text("s")])],
+                ],
+                align: vec![],
+                rows: vec![vec![
+                    vec![Inline::Link {
+                        href: "http://e.com".into(),
+                        title: Some("t".into()),
+                        content: vec![text("link")],
+                    }],
+                    vec![Inline::Code("x".into())],
+                    vec![text("plain")],
+                ]],
+            }),
+            "\
+| **bold**                 | *it* | ~~s~~ |
+| ------------------------ | ---- | ----- |
+| [link](http://e.com \"t\") | `x`  | plain |"
+        );
+    }
+
+    #[test]
+    fn a_break_inside_a_cell_becomes_a_space() {
+        // A row is one line. `<br>` would be raw HTML that the parser reads back as literal text
+        // and the next render escapes, so the pane would change under the user; a space converges.
+        assert_eq!(
+            raw_table(Table {
+                head: row(&["h"]),
+                align: vec![],
+                rows: vec![vec![vec![
+                    text("a"),
+                    Inline::HardBreak,
+                    text("b"),
+                    Inline::SoftBreak,
+                    text("c"),
+                ]]],
+            }),
+            "| h     |\n| ----- |\n| a b c |"
+        );
+    }
+
+    #[test]
+    fn a_newline_that_reaches_a_cell_anyway_becomes_a_space() {
+        // The model says a `Text` never holds a newline, but `render` takes any `&Document`, and a
+        // newline here would end the row and shear the table in half.
+        assert_eq!(
+            raw_table(Table {
+                head: row(&["h"]),
+                align: vec![],
+                rows: vec![vec![vec![text("a\nb")]]],
+            }),
+            "| h   |\n| --- |\n| a b |"
+        );
+    }
+
+    #[test]
+    fn a_cell_beginning_with_a_block_marker_needs_no_escape() {
+        // A cell is never the start of a line — the `|` is — so `#` and `-` are just text.
+        let out = raw_table(Table {
+            head: row(&["# not a heading", "- not a bullet"]),
+            align: vec![],
+            rows: vec![],
+        });
+        assert!(out.starts_with("| # not a heading | - not a bullet |"));
+        assert_eq!(parse(&out).blocks.len(), 1);
+    }
+
+    #[test]
+    fn a_table_inside_a_blockquote_keeps_its_quote_marker_on_every_line() {
+        assert_eq!(
+            md(vec![Block::BlockQuote(vec![Block::Table(Table {
+                head: row(&["a", "b"]),
+                align: vec![],
+                rows: vec![row(&["1", "2"])],
+            })])]),
+            "> | a   | b   |\n> | --- | --- |\n> | 1   | 2   |"
+        );
+    }
+
+    #[test]
+    fn round_trip_a_table_from_markdown_and_back() {
+        let src = "\
+| Name | Qty | Price |
+| :--- | --: | :---: |
+| Bolt | 12 | 0.10 |
+| Long widget name | 3 | 11.00 |";
+        let once = render(&parse(src));
+        assert_eq!(
+            once,
+            "\
+| Name             | Qty | Price |
+| :--------------- | --: | :---: |
+| Bolt             |  12 | 0.10  |
+| Long widget name |   3 | 11.00 |"
+        );
+        // Markdown -> AST -> Markdown -> AST is a fixpoint in both directions.
+        assert_eq!(parse(&once), parse(src));
+        assert_eq!(render(&parse(&once)), once);
     }
 
     // ---- lists ------------------------------------------------------------------------------
