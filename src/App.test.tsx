@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { App } from './App';
 
 describe('App', () => {
-  it('mounts the whole screen: title row, both panes, both editors, the action bar', () => {
+  it('mounts the whole screen: title row, both panes, both editors, the copy buttons', () => {
     render(<App />);
 
     const root = screen.getByTestId('app-root');

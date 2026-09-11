@@ -101,7 +101,7 @@ markdown-converter/
 │   ├── components/
 │   │   ├── RichEditor/          # TipTap
 │   │   ├── MarkdownEditor/      # CodeMirror 6
-│   │   ├── CopyActions/
+│   │   ├── CopyButton/          # low-key per-pane copy icon
 │   │   ├── SplitPane/
 │   │   └── StatusToast/
 │   ├── stores/                  # Zustand
@@ -567,7 +567,7 @@ actions. Depends on Phase 2's command surface (2.2); can start against the `todo
 | 3.1 | Zustand store + the sync engine (below)                                                   | `src/stores/**`, `src/lib/**`    | serial                |
 | 3.2 | `MarkdownEditor` — CodeMirror 6, markdown mode, monospace, no line numbers                | `components/MarkdownEditor/**`   | parallel              |
 | 3.3 | `RichEditor` — TipTap 3, marks restricted to the AST's inline set                         | `components/RichEditor/**`       | parallel              |
-| 3.4 | `CopyActions` — Copy for Teams · Copy Markdown · Copy Text                                | `components/CopyActions/**`      | parallel              |
+| 3.4 | `CopyButton` — a quiet copy icon in each pane header (see below)                          | `components/CopyButton/**`       | parallel              |
 | 3.5 | `StatusToast` — transient "Pasted rich text" / "Copied"                                   | `components/StatusToast/**`      | parallel              |
 | 3.6 | Paste interception on the Formatted pane -> `read_clipboard` -> convert                   | `components/RichEditor/paste.ts` | serial, needs 3.1     |
 | 3.7 | Wire the real clipboard commands per ADR 0001; permissions in `capabilities/default.json` | `src-tauri/**`                   | parallel              |
@@ -590,6 +590,27 @@ So the E2E suite exercises the real UI against real conversions, while conversio
 stays covered exhaustively by the Rust corpus. What Playwright is actually there to catch is the
 class of bug unit tests cannot reach: caret theft, sync loops, stale async responses landing out of
 order, copy actions wiring the wrong payload, and layout breaking at small window sizes.
+
+### Copy affordances (3.4) — as built
+
+`plan.md` sketches three labelled buttons in a bar along the bottom. Built and rejected: a bar
+detached from both panes makes you read three labels to work out which one applies to what you are
+looking at, and it is the loudest thing on a screen whose whole point is that the content is the
+focus.
+
+What shipped instead is the quiet icon-button pattern ChatGPT and Claude use on code blocks — the
+copy affordance sits in the header of the pane it copies:
+
+- **Formatted** header: copy for Teams (rich), and a second icon for plain text.
+- **Markdown** header: copy the Markdown source.
+
+Icon-only, muted until hovered, no fill or border. Each carries a `title` and an `aria-label`,
+because an icon cannot name itself. Clicking swaps the icon to a tick for ~1.6s.
+
+That tick replaced the success toast. The button that changed _is_ the confirmation and it says
+which of the three actions succeeded, which a pill at the bottom of the window cannot; showing both
+was saying it twice. The toast is still used for paste detection and for failures — a silent
+failure is the one outcome the user must not miss.
 
 ### The sync engine (3.1) — the one genuinely hard piece of the frontend
 

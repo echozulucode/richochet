@@ -45,14 +45,34 @@ test.describe('copy actions', () => {
     expect(writes[0].text.trim()).toBe('Important');
   });
 
-  test('copying shows a transient confirmation', async ({ page }) => {
+  test('copying confirms on the button itself, then returns to normal', async ({ page }) => {
     await openApp(page);
-    await page.getByTestId('copy-markdown').click();
+    const button = page.getByTestId('copy-markdown');
+    await expect(button).toHaveAttribute('data-copied', 'false');
 
-    const toast = page.getByTestId('toast');
-    await expect(toast).toBeVisible();
-    // "Nothing more intrusive" — it must go away on its own.
-    await expect(toast).toBeHidden({ timeout: 8_000 });
+    await button.click();
+
+    // The tick on the clicked button is the whole confirmation — it says *which* action
+    // succeeded, which a toast at the bottom of the window cannot.
+    await expect(button).toHaveAttribute('data-copied', 'true');
+    // "Nothing more intrusive" — no toast piling on top of it.
+    await expect(page.getByTestId('toast')).toBeHidden();
+    // And it must reset itself.
+    await expect(button).toHaveAttribute('data-copied', 'false', { timeout: 8_000 });
+  });
+
+  test('each pane carries the copy action for its own content', async ({ page }) => {
+    await openApp(page);
+
+    // An action belongs next to the thing it acts on, not in a bar detached from both panes.
+    await expect(page.getByTestId('pane-formatted').getByTestId('copy-teams')).toBeVisible();
+    await expect(page.getByTestId('pane-formatted').getByTestId('copy-text')).toBeVisible();
+    await expect(page.getByTestId('pane-markdown').getByTestId('copy-markdown')).toBeVisible();
+
+    // Icon-only, so each must still name itself for assistive tech.
+    await expect(page.getByTestId('copy-teams')).toHaveAttribute('aria-label', 'Copy for Teams');
+    await expect(page.getByTestId('copy-markdown')).toHaveAttribute('aria-label', 'Copy Markdown');
+    await expect(page.getByTestId('copy-text')).toHaveAttribute('aria-label', 'Copy plain text');
   });
 });
 

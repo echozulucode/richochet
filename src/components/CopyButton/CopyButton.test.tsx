@@ -6,7 +6,7 @@ import { setBackend } from '../../lib/converter';
 import type { ConversionBackend, OutboundPayload } from '../../lib/types';
 import { documentStore } from '../../stores/documentStore';
 import { toastStore } from '../../stores/toastStore';
-import { CopyActions } from './CopyActions';
+import { CopyButton } from './CopyButton';
 
 function stubBackend(): { backend: ConversionBackend; writes: OutboundPayload[] } {
   const writes: OutboundPayload[] = [];
@@ -22,11 +22,12 @@ function stubBackend(): { backend: ConversionBackend; writes: OutboundPayload[] 
   return { backend, writes };
 }
 
-describe('CopyActions', () => {
+describe('CopyButton', () => {
   afterEach(() => {
     setBackend(null);
     documentStore.getState().reset();
     toastStore.getState().dismiss();
+    vi.useRealTimers();
   });
 
   it('writes HTML and a plain-text fallback together for Teams', async () => {
@@ -34,25 +35,29 @@ describe('CopyActions', () => {
     setBackend(backend);
     documentStore.setState({ markdown: '# Hi', owner: 'markdown' });
 
-    render(<CopyActions />);
+    render(<CopyButton target="teams" label="Copy for Teams" testId="copy-teams" />);
     await userEvent.click(screen.getByTestId('copy-teams'));
 
     await waitFor(() => {
       expect(writes).toEqual([{ html: 'html:# Hi', text: 'text:# Hi' }]);
     });
-    expect(toastStore.getState().toast?.message).toBe('Copied for Teams');
   });
 
-  it('writes text only for Copy Markdown and Copy Plain Text', async () => {
+  it('writes text only for Markdown and plain text', async () => {
     const { backend, writes } = stubBackend();
     setBackend(backend);
     documentStore.setState({ markdown: 'body', owner: 'markdown' });
 
-    render(<CopyActions />);
+    const { unmount } = render(
+      <CopyButton target="markdown" label="Copy Markdown" testId="copy-markdown" />,
+    );
     await userEvent.click(screen.getByTestId('copy-markdown'));
     await waitFor(() => {
       expect(writes).toHaveLength(1);
     });
+    unmount();
+
+    render(<CopyButton target="text" label="Copy plain text" testId="copy-text" icon="text" />);
     await userEvent.click(screen.getByTestId('copy-text'));
     await waitFor(() => {
       expect(writes).toHaveLength(2);
@@ -67,7 +72,7 @@ describe('CopyActions', () => {
     setBackend(backend);
     documentStore.setState({ html: '<p>x</p>', owner: 'rich' });
 
-    render(<CopyActions />);
+    render(<CopyButton target="markdown" label="Copy Markdown" testId="copy-markdown" />);
     await userEvent.click(screen.getByTestId('copy-markdown'));
 
     await waitFor(() => {
@@ -76,20 +81,51 @@ describe('CopyActions', () => {
     expect(backend.convert).toHaveBeenCalledWith('<p>x</p>', 'html', 'markdown');
   });
 
-  it('surfaces a conversion failure as an error toast', async () => {
+  it('confirms with a tick and then returns to normal', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { backend } = stubBackend();
+    setBackend(backend);
+    documentStore.setState({ markdown: 'x', owner: 'markdown' });
+
+    render(<CopyButton target="markdown" label="Copy Markdown" testId="copy-markdown" />);
+    const button = screen.getByTestId('copy-markdown');
+    expect(button).toHaveAttribute('data-copied', 'false');
+
+    await userEvent.click(button);
+    await waitFor(() => {
+      expect(button).toHaveAttribute('data-copied', 'true');
+    });
+    // The tick is the confirmation, so there must not also be a toast saying the same thing.
+    expect(toastStore.getState().toast).toBeNull();
+
+    await vi.advanceTimersByTimeAsync(2000);
+    await waitFor(() => {
+      expect(button).toHaveAttribute('data-copied', 'false');
+    });
+  });
+
+  it('surfaces a failure as an error toast and does not show a tick', async () => {
     const backend: ConversionBackend = {
       name: 'mock',
-      convert: () => Promise.reject(new Error('no engine')),
+      convert: () => Promise.reject(new Error('engine exploded')),
       readClipboard: () => Promise.resolve({ kind: 'text', html: null, rtf: null, text: '' }),
       writeClipboard: () => Promise.resolve(),
     };
     setBackend(backend);
+    documentStore.setState({ markdown: 'x', owner: 'markdown' });
 
-    render(<CopyActions />);
+    render(<CopyButton target="markdown" label="Copy Markdown" testId="copy-markdown" />);
     await userEvent.click(screen.getByTestId('copy-markdown'));
 
     await waitFor(() => {
-      expect(toastStore.getState().toast).toMatchObject({ message: 'no engine', tone: 'error' });
+      expect(toastStore.getState().toast?.message).toBe('engine exploded');
     });
+    expect(toastStore.getState().toast?.tone).toBe('error');
+    expect(screen.getByTestId('copy-markdown')).toHaveAttribute('data-copied', 'false');
+  });
+
+  it('names the action for screen readers, since the icon cannot', () => {
+    render(<CopyButton target="teams" label="Copy for Teams" testId="copy-teams" />);
+    expect(screen.getByRole('button', { name: 'Copy for Teams' })).toBeInTheDocument();
   });
 });
