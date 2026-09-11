@@ -150,3 +150,49 @@ export function lineForPosition(
   const end = index === last ? endLine(anchors, totalLines) : valueAt(anchors, index + 1);
   return start + fraction * Math.max(0, end - start);
 }
+
+/**
+ * How much of the scroll range at each end is reserved for pulling the follower onto the edge.
+ *
+ * A fraction rather than a pixel count so it behaves the same in a tall window and a short one.
+ */
+export const EDGE_BAND = 0.12;
+
+/**
+ * Pull an anchored offset onto the document ends as the driver approaches them.
+ *
+ * Block anchoring aligns the *top* of the two viewports, which is right in the middle of a
+ * document and wrong at its ends. When the two panes have different heights — a tall code block
+ * rendered short, a table rendered tall — scrolling the shorter pane to its very bottom leaves the
+ * taller one anchored on whichever block happens to be at the top of that last viewport, with
+ * content still below it. The user can then never reach the end of the taller pane by scrolling
+ * the shorter one, which is exactly the complaint.
+ *
+ * So the ends are pinned: at progress 0 the follower goes to 0, at progress 1 it goes to its
+ * maximum, and in between the correction fades out over [`EDGE_BAND`] so there is no jump. Outside
+ * the two bands the anchored offset is used untouched, because that is where anchoring earns its
+ * keep.
+ *
+ * @param anchored - the offset block anchoring chose.
+ * @param progress - how far the driving pane is through its own range, 0-1.
+ * @param range - the follower's maximum scrollTop.
+ * @returns a finite offset within `0..range`.
+ */
+export function pinToEnds(anchored: number, progress: number, range: number): number {
+  const limit = Number.isFinite(range) && range > 0 ? range : 0;
+  if (limit === 0) return 0;
+
+  const from = Number.isFinite(anchored) ? Math.min(Math.max(anchored, 0), limit) : 0;
+  // An unmeasurable driver means we do not know where it is, which is not the same as knowing it
+  // is at the top. Leave the anchored offset alone rather than yanking the follower to 0.
+  if (!Number.isFinite(progress)) return from;
+  const t = clamp01(progress);
+
+  // Distance into whichever band we are in, 0 outside both, 1 at the very edge.
+  const weight =
+    t <= EDGE_BAND ? 1 - t / EDGE_BAND : t >= 1 - EDGE_BAND ? (t - (1 - EDGE_BAND)) / EDGE_BAND : 0;
+  if (weight <= 0) return from;
+
+  const edge = t < 0.5 ? 0 : limit;
+  return from + (edge - from) * clamp01(weight);
+}

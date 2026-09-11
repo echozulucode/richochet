@@ -3,9 +3,12 @@ import { expect, test } from '@playwright/test';
 import {
   openApp,
   outline,
+  outlineSettled,
+  scroller,
   scrollRange,
   scrollTop,
   setScrollSample,
+  settled,
   topVisibleBlock,
   visibleBlocks,
   wheelOver,
@@ -59,7 +62,10 @@ test.describe('synchronized scrolling', () => {
     await openApp(page, { sync: true });
     await setScrollSample(page);
 
-    await wheelOver(page, 'rich', 500);
+    // Deliberately a modest scroll. Anchoring aligns the viewport *tops*, which is the claim
+    // being tested; within the end bands the tops are pinned apart on purpose (see the
+    // end-of-document specs below), so a scroll that reached the bottom would test the wrong thing.
+    await wheelOver(page, 'rich', 200);
 
     await expect
       .poll(async () => scrollTop(page, 'markdown'), { message: 'Markdown pane did not follow' })
@@ -132,5 +138,78 @@ test.describe('synchronized scrolling', () => {
 
     await page.waitForTimeout(400);
     expect(await scrollTop(page, 'rich')).toBe(0);
+  });
+
+  test('scrolling one pane to its bottom reaches the other pane bottom', async ({ page }) => {
+    await openApp(page, { sync: true });
+    await setScrollSample(page);
+
+    const markdownRange = await scrollRange(page, 'markdown');
+    const richRange = await scrollRange(page, 'rich');
+    expect(markdownRange).toBeGreaterThan(0);
+    expect(richRange).toBeGreaterThan(0);
+
+    // Block anchoring aligns the *tops* of the viewports, so at full scroll the follower used to
+    // stop on whichever block sat at the top of that last screen, leaving its own tail unreachable.
+    // A real wheel, not a programmatic scrollTop: only a gesture takes the floor outright, and a
+    // programmatic scroll arriving while the other pane still holds it is dropped as echo.
+    await wheelOver(page, 'markdown', 5000);
+    await expect.poll(async () => scrollTop(page, 'rich')).toBeGreaterThan(richRange - 4);
+
+    // And the same going back to the top.
+    await wheelOver(page, 'markdown', -5000);
+    await expect.poll(async () => scrollTop(page, 'rich')).toBeLessThan(4);
+  });
+
+  test('the taller pane reaches its own end when driven from the shorter one', async ({ page }) => {
+    await openApp(page, { sync: true });
+    await setScrollSample(page);
+
+    const markdownRange = await scrollRange(page, 'markdown');
+    const richRange = await scrollRange(page, 'rich');
+    // The panes are genuinely different heights - a 12-line code block renders compactly - which
+    // is the whole reason the ends need pinning rather than just anchoring.
+    expect(Math.abs(markdownRange - richRange)).toBeGreaterThan(20);
+
+    const [shorter, taller] =
+      markdownRange < richRange ? (['markdown', 'rich'] as const) : (['rich', 'markdown'] as const);
+
+    await wheelOver(page, shorter, 5000);
+
+    const tallerRange = await scrollRange(page, taller);
+    await expect
+      .poll(async () => scrollTop(page, taller), {
+        message: 'the taller pane never reached its own end',
+      })
+      .toBeGreaterThan(tallerRange - 4);
+  });
+
+  test('editing re-aligns the panes without needing a scroll', async ({ page }) => {
+    await openApp(page, { sync: true });
+    await setScrollSample(page);
+
+    // Park half way down, driven from the Markdown pane.
+    const markdownRange = await scrollRange(page, 'markdown');
+    await wheelOver(page, 'markdown', markdownRange / 2);
+    await page.waitForTimeout(400);
+
+    const richBefore = await scrollTop(page, 'rich');
+    expect(richBefore).toBeGreaterThan(0);
+
+    // Now type, without touching either scrollbar. Inserting lines above moves every anchor, so
+    // the follower has to be pushed again; before this fix sync appeared to stop working until
+    // the user scrolled.
+    const editor = scroller(page, 'markdown');
+    await editor.click();
+    await page.keyboard.press('ControlOrMeta+Home');
+    await page.keyboard.type('Block 00 inserted at the top.\n\n');
+    await settled(page);
+    await outlineSettled(page);
+    await page.waitForTimeout(400);
+
+    // The mock only knows outlines for documents in the oracle, and an edited one is not, so this
+    // exercises the proportional fallback. That is fine: the bug was that *nothing* re-projected
+    // after an edit, on either path. The anchored path is covered by the specs above.
+    expect(await scrollTop(page, 'rich')).not.toBe(richBefore);
   });
 });

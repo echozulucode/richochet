@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  EDGE_BAND,
   clamp01,
   lineForPosition,
+  pinToEnds,
   positionForLine,
   sanitizeOutline,
   type BlockPosition,
@@ -176,5 +178,63 @@ describe('round trip', () => {
     const twice = positionForLine(lines, lineForPosition(lines, once, 44), 44);
     expect(twice.index).toBe(once.index);
     expect(twice.fraction).toBeCloseTo(once.fraction, 10);
+  });
+});
+
+describe('pinToEnds', () => {
+  it('pulls the follower onto the top when the driver is at the top', () => {
+    // Anchoring alone would leave it at 400; at progress 0 the only right answer is 0.
+    expect(pinToEnds(400, 0, 1500)).toBe(0);
+  });
+
+  it('pulls the follower onto the bottom when the driver is at the bottom', () => {
+    // The complaint: a taller follower stayed anchored mid-document with content still below.
+    expect(pinToEnds(1000, 1, 1500)).toBe(1500);
+  });
+
+  it('leaves the anchored offset alone in the middle, where anchoring is the point', () => {
+    expect(pinToEnds(700, 0.5, 1500)).toBe(700);
+    expect(pinToEnds(700, 0.3, 1500)).toBe(700);
+    expect(pinToEnds(700, 0.7, 1500)).toBe(700);
+  });
+
+  it('fades the correction in rather than jumping at the very edge', () => {
+    const range = 1000;
+    const anchored = 600;
+    const outside = pinToEnds(anchored, 1 - EDGE_BAND, range);
+    const halfway = pinToEnds(anchored, 1 - EDGE_BAND / 2, range);
+    const atEnd = pinToEnds(anchored, 1, range);
+
+    expect(outside).toBe(anchored);
+    expect(halfway).toBeGreaterThan(outside);
+    expect(halfway).toBeLessThan(atEnd);
+    expect(atEnd).toBe(range);
+  });
+
+  it('is monotonic across the whole range', () => {
+    const range = 1200;
+    let previous = -1;
+    for (let i = 0; i <= 100; i += 1) {
+      const t = i / 100;
+      // A plausible anchored curve: roughly proportional, so pinning only has to fix the ends.
+      const value = pinToEnds(t * 900, t, range);
+      expect(value).toBeGreaterThanOrEqual(previous);
+      previous = value;
+    }
+    expect(previous).toBe(range);
+  });
+
+  it('never leaves the follower outside its own range', () => {
+    expect(pinToEnds(99999, 0.5, 1000)).toBe(1000);
+    expect(pinToEnds(-50, 0.5, 1000)).toBe(0);
+  });
+
+  it('is total for degenerate and hostile input', () => {
+    expect(pinToEnds(100, 0.5, 0)).toBe(0);
+    expect(pinToEnds(Number.NaN, 0.5, 1000)).toBe(0);
+    expect(pinToEnds(100, Number.NaN, 1000)).toBe(100);
+    expect(pinToEnds(100, 0.5, Number.NaN)).toBe(0);
+    expect(pinToEnds(100, -5, 1000)).toBe(0);
+    expect(pinToEnds(100, 5, 1000)).toBe(1000);
   });
 });

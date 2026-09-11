@@ -1,6 +1,6 @@
 import { documentStore } from '../stores/documentStore';
 import { getBackend } from './converter';
-import { clamp01, sanitizeOutline, type BlockPosition } from './scrollMapping';
+import { clamp01, pinToEnds, sanitizeOutline, type BlockPosition } from './scrollMapping';
 import { updateTestHook } from './testHook';
 
 /**
@@ -155,10 +155,18 @@ export function createScrollSync(enabled: boolean): ScrollSync {
     // Nothing for the follower to do, and writing scrollTop anyway would only generate echo.
     if (scrollRange(targetElement) < 1) return;
 
+    const sourceRange = scrollRange(sourceElement);
+    const progress = sourceRange > 0 ? clamp01(sourceElement.scrollTop / sourceRange) : 0;
+
     if (lines.length >= 2 && agrees(source) && agrees(target)) {
       const position = source.positionAtTop(lines);
       if (position) {
         target.scrollToPosition(position, lines);
+        // Anchoring aligns the tops of the viewports, which is wrong at the document ends when the
+        // two panes are different heights. Pin the ends so scrolling one to its bottom reaches the
+        // other's bottom; see `pinToEnds`.
+        const pinned = pinToEnds(targetElement.scrollTop, progress, scrollRange(targetElement));
+        if (Math.abs(pinned - targetElement.scrollTop) >= 1) targetElement.scrollTop = pinned;
         return;
       }
     }
@@ -168,8 +176,6 @@ export function createScrollSync(enabled: boolean): ScrollSync {
     // single anchor says nothing the proportion does not already, or the panes disagree about how
     // many blocks there are. Proportional scrolling drifts on tall blocks, which is the whole
     // reason for the outline — but drifting is better than not moving.
-    const range = scrollRange(sourceElement);
-    const progress = range > 0 ? clamp01(sourceElement.scrollTop / range) : 0;
     targetElement.scrollTop = progress * scrollRange(targetElement);
   }
 
@@ -195,6 +201,25 @@ export function createScrollSync(enabled: boolean): ScrollSync {
     outlineFor = markdown;
     outlineRevision += 1;
     updateTestHook({ outlineLines: next, outlineRevision });
+    // A new outline means the anchors moved. Without re-projecting here the panes stay where the
+    // last *scroll* left them and only realign when the user scrolls again, which reads as sync
+    // having stopped working the moment you start typing.
+    reproject();
+  }
+
+  /**
+   * Push the panes back into alignment after the document changed rather than after a scroll.
+   *
+   * The editing pane drives: it is the one whose scroll position the user is holding steady while
+   * they type, so it is the one the other should follow. If the user happens to be scrolling the
+   * *other* pane at that moment they keep the floor — a live gesture always outranks a re-render.
+   */
+  function reproject(): void {
+    const owner = documentStore.getState().owner;
+    const pane: SyncPaneId = owner === 'rich' ? 'rich' : 'markdown';
+    if (driver !== null && driver !== pane && now() < driverUntil) return;
+    if (!panes.has(pane) || !panes.has(otherPane(pane))) return;
+    requestProjection(pane);
   }
 
   function fetchOutline(markdown: string): void {
@@ -225,14 +250,29 @@ export function createScrollSync(enabled: boolean): ScrollSync {
   }
 
   /** Follow the canonical Markdown so the outline tracks whatever is on screen. */
+  /** Both derived-text counters, so either pane re-rendering triggers a re-projection. */
+  function revisionKey(): string {
+    const state = documentStore.getState();
+    return `${state.markdownRevision}:${state.htmlRevision}`;
+  }
+
   function watchDocument(): void {
     if (unsubscribe) return;
     let previous = documentStore.getState().markdown;
     fetchOutline(previous);
+    let revisions = revisionKey();
     unsubscribe = documentStore.subscribe((state) => {
-      if (state.markdown === previous) return;
-      previous = state.markdown;
-      scheduleOutline(state.markdown);
+      if (state.markdown !== previous) {
+        previous = state.markdown;
+        scheduleOutline(state.markdown);
+      }
+      // The derived pane has just been rewritten, so its content is a different height than the
+      // projection was computed against. Re-project on the next frame, once it has laid out.
+      const next = revisionKey();
+      if (next !== revisions) {
+        revisions = next;
+        reproject();
+      }
     });
   }
 
