@@ -39,14 +39,18 @@ describe('pasteFromClipboard', () => {
     expect(toastStore.getState().toast?.message).toBe('Pasted rich text');
   });
 
-  it('falls back to plain text when no HTML flavour was offered', async () => {
-    const backend = backendFor({ kind: 'text', html: null, rtf: null, text: 'just words' });
+  it('takes plain text as Markdown source, without converting it', async () => {
+    const backend = backendFor({ kind: 'text', html: null, rtf: null, text: '**bold** text' });
     setBackend(backend);
 
     await pasteFromClipboard();
 
-    expect(backend.convert).toHaveBeenCalledWith('just words', 'text', 'markdown');
-    expect(toastStore.getState().toast?.message).toBe('Pasted plain text');
+    // Converting `text -> markdown` would escape it to `\*\*bold\*\* text`, which renders as
+    // literal asterisks. Plain text on the clipboard is Markdown here, so it goes in untouched.
+    // (`markdown -> html` is still called afterwards - that is the store rendering the preview.)
+    expect(backend.convert).not.toHaveBeenCalledWith('**bold** text', 'text', 'markdown');
+    expect(documentStore.getState().markdown).toBe('**bold** text');
+    expect(toastStore.getState().toast?.message).toBe('Pasted Markdown');
   });
 
   it('does nothing when the clipboard is empty', async () => {
@@ -55,7 +59,8 @@ describe('pasteFromClipboard', () => {
 
     await pasteFromClipboard();
 
-    expect(backend.convert).not.toHaveBeenCalled();
+    // (`markdown -> html` is still called afterwards - that is the store rendering the preview.)
+    expect(backend.convert).not.toHaveBeenCalledWith('**bold** text', 'text', 'markdown');
     expect(toastStore.getState().toast).toBeNull();
   });
 

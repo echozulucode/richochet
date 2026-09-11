@@ -96,7 +96,7 @@ test.describe('paste detection', () => {
     await expect(page.getByTestId('toast')).toContainText(/rich text/i);
   });
 
-  test('pasting plain content says plain text', async ({ page }) => {
+  test('pasting plain content takes it as Markdown', async ({ page }) => {
     await openApp(page);
 
     await page.evaluate(() => {
@@ -108,6 +108,27 @@ test.describe('paste detection', () => {
     await settled(page);
 
     await expect(page.getByTestId('editor-markdown')).toContainText('just words');
-    await expect(page.getByTestId('toast')).toContainText(/plain text/i);
+    await expect(page.getByTestId('toast')).toContainText(/Markdown/i);
+  });
+
+  test('pasting Markdown source renders it, rather than escaping it', async ({ page }) => {
+    await openApp(page);
+
+    // The regression this pins: the plain-text branch used to convert `text -> markdown`, which
+    // escapes every Markdown character. `**Hello Eric**` arrived as `\*\*Hello Eric\*\*` and
+    // showed literal asterisks — "paste some Markdown and nothing happens".
+    await page.evaluate(() => {
+      window.__richochet_test?.stageClipboard({ kind: 'text', text: '**Hello Eric**' });
+    });
+
+    await page.getByTestId('editor-rich').click();
+    await page.keyboard.press('ControlOrMeta+v');
+    await settled(page);
+
+    await expect(page.getByTestId('editor-markdown')).toContainText('**Hello Eric**');
+    // No backslash escapes: that is exactly what the old text->markdown conversion introduced.
+    await expect(page.getByTestId('editor-markdown')).not.toContainText('\\*');
+    // And it actually rendered as bold rather than as four asterisks.
+    await expect(page.getByTestId('editor-rich').locator('strong')).toHaveText('Hello Eric');
   });
 });
