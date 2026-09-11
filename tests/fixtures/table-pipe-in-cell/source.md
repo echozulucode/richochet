@@ -1,3 +1,3 @@
 | Expression | Meaning |
-| ---------- | ------- |
-| `a \| b`   | either  |
+| --- | --- |
+| `a \| b` | either |

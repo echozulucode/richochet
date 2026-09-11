@@ -195,8 +195,14 @@ body {
   margin: 1.4em 0;
 }
 
-/* Empty-document hint without pulling in another TipTap extension. */
-.rich-surface .tiptap > p:only-child:has(> br.ProseMirror-trailingBreak)::before {
+/* Empty-document hint without pulling in another TipTap extension.
+ *
+ * The `:only-child` on the `<br>` is load-bearing. ProseMirror appends a `ProseMirror-trailingBreak`
+ * to any paragraph that *ends* in a hard break, not only to empty ones, so matching the paragraph
+ * alone painted the hint on top of real content the moment someone typed a line with Shift+Enter —
+ * which is exactly how you write a line break in Teams. Requiring the break to be the paragraph's
+ * only child is what actually means "empty". */
+.rich-surface .tiptap > p:only-child:has(> br.ProseMirror-trailingBreak:only-child)::before {
   content: 'Paste Teams content here';
   color: var(--muted);
   pointer-events: none;

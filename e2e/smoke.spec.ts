@@ -36,4 +36,27 @@ test.describe('app shell', () => {
     await openApp(page);
     expect(errors).toEqual([]);
   });
+
+  test('the empty-document hint does not paint over real content', async ({ page }) => {
+    await openApp(page);
+    const rich = page.getByTestId('editor-rich');
+
+    // Shown when there is genuinely nothing there.
+    await expect(rich).toHaveText('');
+
+    // A line ending in a hard break is exactly how you write one in Teams, and ProseMirror marks
+    // such a paragraph with the same trailing <br> an empty one gets. The hint must not come back.
+    await rich.click();
+    await rich.pressSequentially('hello');
+    await page.keyboard.down('Shift');
+    await page.keyboard.press('Enter');
+    await page.keyboard.up('Shift');
+
+    const painted = await page.evaluate(() => {
+      const p = document.querySelector('[data-testid="editor-rich"] > p');
+      return p ? p.matches(':only-child:has(> br.ProseMirror-trailingBreak:only-child)') : false;
+    });
+    expect(painted).toBe(false);
+    await expect(rich).toContainText('hello');
+  });
 });

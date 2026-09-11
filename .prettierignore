@@ -3,3 +3,11 @@ node_modules
 target
 pnpm-lock.yaml
 src/test-support/oracle.json
+
+# The corpus is test data: its bytes are the point. Prettier reformatted the HTML fixtures from
+# one line into indented multi-line markup and padded the Markdown tables, which silently changed
+# what they test — whitespace handling in clipboard HTML is exactly what the parser has to get
+# right, and `chromium-rich-message` is a verbatim capture that must stay verbatim.
+tests/fixtures
+crates/mdcore/tests/data
+crates/mdcore/tests/snapshots
