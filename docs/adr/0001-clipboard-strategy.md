@@ -57,6 +57,9 @@ between us and a Win32 API we are already calling correctly.
 
 - Richochet needs to ship on macOS or Linux.
 - Teams starts publishing a format `clipboard-win` cannot express.
-- `raw::set_without_clear` turns out not to preserve the first format in practice — this is the one
-  assumption here that has not yet been verified against a running Teams, and it is load-bearing
-  for "Copy for Teams".
+- ~~`raw::set_without_clear` turns out not to preserve the first format in practice.~~
+  **Verified 2026-09-10.** Clicking "Copy for Teams" in the built app leaves _both_ representations
+  on the clipboard simultaneously — `HTML Format` and `CF_UNICODETEXT` — and the CF_HTML offsets
+  `clipboard-win` writes are byte-exact (105 / 141 / 215 / 251 for a 74-byte fragment, each one
+  checkable by hand). What remains unverified is whether **Teams** accepts that HTML on paste,
+  which is Phase 1 task 1.5 and needs a human.

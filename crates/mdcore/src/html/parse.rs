@@ -11,9 +11,16 @@
 //!
 //! 1. [`sanitize`] with `ammonia` — scripts, iframes and event handlers never reach the parser.
 //! 2. Parse the result as an HTML *fragment* (clipboard HTML is a fragment, not a document).
-//! 3. Walk the tree, accumulating [`MarkSet`]s down the branches and collapsing whitespace per
-//!    the HTML rules on the way.
+//! 3. Walk the tree, wrapping each element's parsed children in the marks that element turns on
+//!    and collapsing whitespace per the HTML rules on the way.
 //! 4. Hand the blocks to [`Document::from_blocks`], which normalizes them.
+//!
+//! Step 3 wraps rather than distributes, and that distinction is load-bearing. Stamping the full
+//! set of active marks onto every text run would turn `<em>a</em><s><em>b</em>c</s>` into three
+//! independent leaves and lose the grouping the source had; re-factoring those leaves afterwards
+//! is not a unique inverse, so the tree comes back a different — if equivalent — shape and a
+//! round trip through Markdown stops converging. Wrapping the *result of parsing an element's
+//! children* keeps the shape the author wrote.
 
 use std::collections::{HashMap, HashSet};
 
@@ -41,7 +48,7 @@ pub fn parse(input: &str) -> Document {
     let root = dom.document.children.borrow().first().cloned();
     let mut builder = BlockBuilder::new();
     if let Some(root) = root {
-        walk_children(&root, MarkSet::none(), &mut builder);
+        walk_children(&root, Ctx::default(), &mut builder);
     }
     Document::from_blocks(builder.finish())
 }
@@ -155,8 +162,231 @@ pub fn sanitize(input: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Marks
+// ---------------------------------------------------------------------------------------------
+
+/// A mark expressed by *wrapping* a run of inline nodes.
+///
+/// Code is absent on purpose: [`Inline::Code`] is a leaf holding a string rather than a wrapper
+/// around other nodes, so code is the one mark that has to be applied run by run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mark {
+    Bold,
+    Italic,
+    Strike,
+}
+
+/// Innermost first. Wrapping in this order leaves bold outermost, which is the model's canonical
+/// nesting order, so the normalizer has nothing to reorder.
+const WRAP_ORDER: [Mark; 3] = [Mark::Strike, Mark::Italic, Mark::Bold];
+
+/// A set of wrapper marks.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct MarkFlags {
+    bold: bool,
+    italic: bool,
+    strike: bool,
+}
+
+impl MarkFlags {
+    fn get(self, mark: Mark) -> bool {
+        match mark {
+            Mark::Bold => self.bold,
+            Mark::Italic => self.italic,
+            Mark::Strike => self.strike,
+        }
+    }
+
+    fn set(&mut self, mark: Mark, value: bool) {
+        match mark {
+            Mark::Bold => self.bold = value,
+            Mark::Italic => self.italic = value,
+            Mark::Strike => self.strike = value,
+        }
+    }
+
+    fn any(self) -> bool {
+        self.bold || self.italic || self.strike
+    }
+
+    fn union(self, other: Self) -> Self {
+        MarkFlags {
+            bold: self.bold || other.bold,
+            italic: self.italic || other.italic,
+            strike: self.strike || other.strike,
+        }
+    }
+}
+
+/// Which marks are in force where the walk currently stands.
+#[derive(Debug, Clone, Copy, Default)]
+struct Ctx {
+    /// Every mark in force, however it got there. This is what decides whether an element's
+    /// `font-weight: normal` has anything to cancel.
+    active: MarkSet,
+    /// The subset of `active` that no enclosing inline element wraps. A
+    /// `<div style="font-weight:600">` leaves nothing to wrap — its children are blocks, and a
+    /// mark cannot span a block boundary — so its mark has to ride down to the text runs instead.
+    distribute: MarkSet,
+}
+
+impl Ctx {
+    /// Enter an element whose marks have nothing to wrap, so they are carried to the leaves.
+    fn distributing(self, declared: MarkSet) -> Ctx {
+        Ctx {
+            active: self.active.merge(declared),
+            distribute: self.distribute.merge(declared),
+        }
+    }
+
+    /// Enter an inline element. The marks in `add` are wrapped by the caller, so they leave
+    /// `distribute`: carrying them further would bold each text run a second time.
+    fn wrapping(self, declared: MarkSet, add: &[Mark]) -> Ctx {
+        let mut distribute = self.distribute.merge(declared);
+        for mark in add {
+            match mark {
+                Mark::Bold => distribute.bold = None,
+                Mark::Italic => distribute.italic = None,
+                Mark::Strike => distribute.strike = None,
+            }
+        }
+        Ctx {
+            active: self.active.merge(declared),
+            distribute,
+        }
+    }
+}
+
+/// What an element does to the marks in force: which it turns on, for the caller to wrap, and
+/// which it turns off, for the caller to carve out of the wrap an ancestor will apply.
+fn mark_delta(active: MarkSet, declared: MarkSet) -> (Vec<Mark>, MarkFlags) {
+    let mut add = Vec::new();
+    let mut cancel = MarkFlags::default();
+    for mark in WRAP_ORDER {
+        match opinion(declared, mark) {
+            // A mark already in force is not wrapped again: it would only give the normalizer
+            // work to undo.
+            Some(true) if opinion(active, mark) != Some(true) => add.push(mark),
+            Some(false) if opinion(active, mark) == Some(true) => cancel.set(mark, true),
+            _ => {}
+        }
+    }
+    (add, cancel)
+}
+
+fn opinion(marks: MarkSet, mark: Mark) -> Option<bool> {
+    match mark {
+        Mark::Bold => marks.bold,
+        Mark::Italic => marks.italic,
+        Mark::Strike => marks.strike,
+    }
+}
+
+fn wrap(mark: Mark, nodes: Vec<Inline>) -> Inline {
+    match mark {
+        Mark::Bold => Inline::Bold(nodes),
+        Mark::Italic => Inline::Italic(nodes),
+        Mark::Strike => Inline::Strike(nodes),
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Inline accumulation
 // ---------------------------------------------------------------------------------------------
+
+/// A run of inline nodes together with the marks it *refuses*.
+///
+/// A run refuses a mark when something inside it turned that mark off — Teams nests a
+/// `font-weight: normal` span inside a bold run, and the text in it must come out unbolded. The
+/// enclosing element that turns the mark on skips such a run when it wraps, splitting the bold
+/// around the exempt text instead of swallowing it.
+struct Segment {
+    cancels: MarkFlags,
+    nodes: Vec<Inline>,
+}
+
+/// The inline nodes collected for one element, cut into segments wherever a descendant refused a
+/// mark. Content that refuses nothing — the overwhelming majority — accumulates in `current` and
+/// never becomes a segment boundary at all.
+#[derive(Default)]
+struct Frame {
+    done: Vec<Segment>,
+    current: Vec<Inline>,
+}
+
+impl Frame {
+    fn is_empty(&self) -> bool {
+        self.done.is_empty() && self.current.is_empty()
+    }
+
+    fn push_node(&mut self, node: Inline) {
+        self.current.push(node);
+    }
+
+    fn close_current(&mut self) {
+        if !self.current.is_empty() {
+            self.done.push(Segment {
+                cancels: MarkFlags::default(),
+                nodes: std::mem::take(&mut self.current),
+            });
+        }
+    }
+
+    fn push_segment(&mut self, segment: Segment) {
+        if segment.cancels.any() {
+            self.close_current();
+            self.done.push(segment);
+        } else {
+            self.current.extend(segment.nodes);
+        }
+    }
+
+    fn finish(mut self) -> Vec<Segment> {
+        self.close_current();
+        self.done
+    }
+}
+
+/// Wrap a frame's segments in `marks`, leaving out the runs that refuse each one.
+fn apply_marks(segments: Vec<Segment>, marks: &[Mark]) -> Vec<Segment> {
+    let mut out = segments;
+    for &mark in marks {
+        out = apply_mark(out, mark);
+    }
+    out
+}
+
+fn apply_mark(segments: Vec<Segment>, mark: Mark) -> Vec<Segment> {
+    let mut out: Vec<Segment> = Vec::with_capacity(segments.len());
+    let mut segments = segments.into_iter().peekable();
+    while let Some(first) = segments.next() {
+        if first.cancels.get(mark) {
+            // This run opted out. Pass it through unwrapped; the refusal has now been honoured
+            // and must not travel any further up.
+            let mut passed = first;
+            passed.cancels.set(mark, false);
+            out.push(passed);
+            continue;
+        }
+        // Take in the following runs that refuse exactly the same marks, so that one wrapper
+        // covers as much as it can. Runs refusing something different cannot be merged without
+        // changing what they refuse.
+        let cancels = first.cancels;
+        let mut nodes = first.nodes;
+        while segments.peek().is_some_and(|next| next.cancels == cancels) {
+            nodes.extend(segments.next().expect("just peeked").nodes);
+        }
+        out.push(Segment {
+            cancels,
+            nodes: vec![wrap(mark, nodes)],
+        });
+    }
+    out
+}
+
+fn flatten_segments(segments: Vec<Segment>) -> Vec<Inline> {
+    segments.into_iter().flat_map(|s| s.nodes).collect()
+}
 
 /// Accumulates the inline run of the block currently being built, applying the HTML whitespace
 /// rules as it goes.
@@ -167,10 +397,11 @@ pub fn sanitize(input: &str) -> String {
 /// reason `<div><span style="font-weight:600"> Important </span></div>` comes out as a bold
 /// "Important" with no stray spaces at all.
 ///
-/// `frames` is a stack so that a `<a>` can collect its own content without losing continuity of
-/// the whitespace state with the text around it.
+/// `frames` is a stack: an element that contributes marks — and every `<a>` — collects its own
+/// children in a frame of its own, without losing continuity of the whitespace state with the
+/// text around it.
 struct InlineBuilder {
-    frames: Vec<Vec<Inline>>,
+    frames: Vec<Frame>,
     /// A collapsible whitespace run has been seen and not yet emitted.
     space_pending: bool,
     /// Something has been emitted since the start of the block (or since the last `<br>`), so a
@@ -181,32 +412,32 @@ struct InlineBuilder {
 impl InlineBuilder {
     fn new() -> Self {
         InlineBuilder {
-            frames: vec![Vec::new()],
+            frames: vec![Frame::default()],
             space_pending: false,
             emitted: false,
         }
     }
 
-    fn current(&mut self) -> &mut Vec<Inline> {
+    fn current(&mut self) -> &mut Frame {
         self.frames
             .last_mut()
             .expect("the base frame is never popped")
     }
 
     fn is_empty(&self) -> bool {
-        self.frames.iter().all(Vec::is_empty)
+        self.frames.iter().all(Frame::is_empty)
     }
 
     /// Emit a deferred space, if one is owed and would not be leading whitespace.
     fn flush_space(&mut self) {
         if self.space_pending && self.emitted {
-            self.current().push(Inline::Text(" ".to_string()));
+            self.current().push_node(Inline::Text(" ".to_string()));
         }
         self.space_pending = false;
     }
 
     /// Add text, collapsing whitespace per the HTML rules.
-    fn push_text(&mut self, raw: &str, marks: MarkSet) {
+    fn push_text(&mut self, raw: &str, ctx: Ctx) {
         let collapsed = collapse_whitespace(raw);
         if collapsed.is_empty() {
             return;
@@ -223,17 +454,10 @@ impl InlineBuilder {
             self.space_pending = true;
         }
         self.flush_space();
-        let node = wrap_marks(core.to_string(), marks);
-        self.current().push(node);
+        let node = leaf(core.to_string(), ctx.distribute);
+        self.current().push_node(node);
         self.emitted = true;
         self.space_pending = trailing;
-    }
-
-    /// Add a ready-made inline node (a link, an image's alt text, ...).
-    fn push_inline(&mut self, node: Inline) {
-        self.flush_space();
-        self.current().push(node);
-        self.emitted = true;
     }
 
     /// Add an explicit line break.
@@ -245,25 +469,49 @@ impl InlineBuilder {
         if self.is_empty() {
             return;
         }
-        self.current().push(Inline::HardBreak);
+        self.current().push_node(Inline::HardBreak);
         // Whitespace after a break is leading whitespace again.
         self.emitted = false;
     }
 
     fn push_frame(&mut self) {
-        self.frames.push(Vec::new());
+        // Settle any owed space against the *parent* frame, so that it does not end up inside the
+        // mark the child is about to be wrapped in.
+        self.flush_space();
+        self.frames.push(Frame::default());
     }
 
-    fn pop_frame(&mut self) -> Vec<Inline> {
-        self.frames.pop().unwrap_or_default()
+    fn pop_frame(&mut self) -> Vec<Segment> {
+        self.frames.pop().unwrap_or_default().finish()
+    }
+
+    /// Fold a child element's finished segments into the frame it sits in.
+    ///
+    /// Deliberately does not settle a pending space: by the time a child's segments come back,
+    /// an owed space is the child's own *trailing* whitespace, which belongs after this content
+    /// and not before it. Whitespace owed from *before* the child was already settled by
+    /// [`InlineBuilder::push_frame`].
+    fn push_segments(&mut self, segments: Vec<Segment>) {
+        if segments.iter().all(|s| s.nodes.is_empty()) {
+            return;
+        }
+        for segment in segments {
+            if !segment.nodes.is_empty() {
+                self.current().push_segment(segment);
+            }
+        }
+        self.emitted = true;
     }
 
     /// Take the accumulated run and reset for the next block.
+    ///
+    /// Any refusals still outstanding are discharged here: they could only be honoured by a mark
+    /// an ancestor wraps, and no mark crosses a block boundary.
     fn take(&mut self) -> Vec<Inline> {
-        let out = std::mem::take(self.current());
+        let frame = std::mem::take(self.current());
         self.space_pending = false;
         self.emitted = false;
-        out
+        flatten_segments(frame.finish())
     }
 }
 
@@ -288,23 +536,23 @@ fn collapse_whitespace(raw: &str) -> String {
     out
 }
 
-/// Wrap text in whichever marks are active where it appears.
+/// Build a text leaf, carrying the marks that have no enclosing element to wrap them.
 ///
-/// The order here is the model's canonical nesting order (bold outside italic outside strike), so
-/// the normalizer has nothing to reorder.
-fn wrap_marks(text: String, marks: MarkSet) -> Inline {
-    let mut node = if marks.is_code() {
+/// Code is always applied here, because [`Inline::Code`] is a leaf and there is nothing else for
+/// it to wrap.
+fn leaf(text: String, distribute: MarkSet) -> Inline {
+    let mut node = if distribute.is_code() {
         Inline::Code(text)
     } else {
         Inline::Text(text)
     };
-    if marks.is_strike() {
+    if distribute.is_strike() {
         node = Inline::Strike(vec![node]);
     }
-    if marks.is_italic() {
+    if distribute.is_italic() {
         node = Inline::Italic(vec![node]);
     }
-    if marks.is_bold() {
+    if distribute.is_bold() {
         node = Inline::Bold(vec![node]);
     }
     node
@@ -356,53 +604,53 @@ impl BlockBuilder {
 // The walk
 // ---------------------------------------------------------------------------------------------
 
-fn walk_children(node: &Handle, marks: MarkSet, out: &mut BlockBuilder) {
+fn walk_children(node: &Handle, ctx: Ctx, out: &mut BlockBuilder) {
     // Collect first: the recursive walk must not hold a borrow on the children list.
     let children: Vec<Handle> = node.children.borrow().iter().cloned().collect();
     for child in &children {
-        walk_node(child, marks, out);
+        walk_node(child, ctx, out);
     }
 }
 
-fn walk_node(node: &Handle, marks: MarkSet, out: &mut BlockBuilder) {
+fn walk_node(node: &Handle, ctx: Ctx, out: &mut BlockBuilder) {
     match &node.data {
         NodeData::Text { contents } => {
             let text = contents.borrow().to_string();
-            out.inlines.push_text(&text, marks);
+            out.inlines.push_text(&text, ctx);
         }
-        NodeData::Element { .. } => walk_element(node, marks, out),
+        NodeData::Element { .. } => walk_element(node, ctx, out),
         // Documents, doctypes, comments and processing instructions carry nothing we want.
         _ => {}
     }
 }
 
-fn walk_element(node: &Handle, inherited: MarkSet, out: &mut BlockBuilder) {
+fn walk_element(node: &Handle, ctx: Ctx, out: &mut BlockBuilder) {
     let Some(tag) = tag_name(node) else {
         return;
     };
     // Every element, block or inline, can contribute marks to its descendants.
-    let marks = inherited.merge(marks_for(&tag, attr(node, "style").as_deref()));
+    let declared = marks_for(&tag, attr(node, "style").as_deref());
 
     match tag.as_str() {
         "p" => {
             out.saw_paragraph = true;
-            push_container(node, marks, out);
+            push_container(node, ctx.distributing(declared), out);
         }
         "div" | "section" | "article" | "header" | "footer" | "main" | "aside" | "figure"
         | "figcaption" | "address" | "center" | "dl" | "dt" | "dd" | "li" | "details"
-        | "summary" | "caption" => push_container(node, marks, out),
+        | "summary" | "caption" => push_container(node, ctx.distributing(declared), out),
         "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
             let level = tag[1..].parse::<u8>().unwrap_or(1);
-            let content = inline_subtree(node, marks);
+            let content = inline_subtree(node, ctx.distributing(declared));
             out.push_block(Block::heading(level, content));
         }
         "ul" | "ol" => {
-            let list = build_list(node, &tag, marks);
+            let list = build_list(node, &tag, ctx.distributing(declared));
             out.push_block(Block::List(list));
         }
         "blockquote" => {
             let mut sub = BlockBuilder::new();
-            walk_children(node, marks, &mut sub);
+            walk_children(node, ctx.distributing(declared), &mut sub);
             out.push_block(Block::BlockQuote(sub.finish()));
         }
         "pre" => {
@@ -414,32 +662,55 @@ fn walk_element(node: &Handle, inherited: MarkSet, out: &mut BlockBuilder) {
         }
         "hr" => out.push_block(Block::ThematicBreak),
         "table" => {
-            let fallback = table_fallback(node, marks);
+            let fallback = table_fallback(node, ctx.distributing(declared));
             out.push_block(Block::Unsupported {
                 kind: "table".to_string(),
                 fallback,
             });
         }
         "br" => out.inlines.push_break(),
-        "a" => walk_anchor(node, marks, out),
+        "a" => walk_anchor(node, ctx, declared, out),
         "img" => {
             // An image cannot be represented, but its alt text is the author's own description of
             // it and is worth more than nothing.
             if let Some(alt) = attr(node, "alt") {
-                out.inlines.push_text(&alt, marks);
+                out.inlines.push_text(&alt, ctx.distributing(declared));
             }
         }
-        // `<span>`, `<b>`, `<code>` and everything unrecognized: the element itself contributes
-        // marks (already merged above) and is otherwise transparent.
-        _ => walk_children(node, marks, out),
+        // `<span>`, `<b>`, `<code>` and everything unrecognized.
+        _ => walk_inline(node, ctx, declared, out),
     }
+}
+
+/// Walk an inline element: whatever marks it turns on wrap the *result* of parsing its children,
+/// and whatever it turns off is carved out of the wrap an ancestor will apply.
+///
+/// This is the heart of preserving shape rather than merely preserving meaning.
+fn walk_inline(node: &Handle, ctx: Ctx, declared: MarkSet, out: &mut BlockBuilder) {
+    let (add, cancel) = mark_delta(ctx.active, declared);
+    let inner = ctx.wrapping(declared, &add);
+
+    // Nothing to wrap and nothing to carve out: the element is purely transparent, and a frame
+    // would only be overhead.
+    if add.is_empty() && !cancel.any() {
+        walk_children(node, inner, out);
+        return;
+    }
+
+    out.inlines.push_frame();
+    walk_children(node, inner, out);
+    let mut segments = apply_marks(out.inlines.pop_frame(), &add);
+    for segment in &mut segments {
+        segment.cancels = segment.cancels.union(cancel);
+    }
+    out.inlines.push_segments(segments);
 }
 
 /// Walk a block container: its content becomes blocks of its own, never merged with the inline
 /// run that surrounded it.
-fn push_container(node: &Handle, marks: MarkSet, out: &mut BlockBuilder) {
+fn push_container(node: &Handle, ctx: Ctx, out: &mut BlockBuilder) {
     let mut sub = BlockBuilder::new();
-    walk_children(node, marks, &mut sub);
+    walk_children(node, ctx, &mut sub);
     let blocks = sub.finish();
     if blocks.is_empty() {
         return;
@@ -448,16 +719,19 @@ fn push_container(node: &Handle, marks: MarkSet, out: &mut BlockBuilder) {
     out.blocks.extend(blocks);
 }
 
-fn walk_anchor(node: &Handle, marks: MarkSet, out: &mut BlockBuilder) {
+fn walk_anchor(node: &Handle, ctx: Ctx, declared: MarkSet, out: &mut BlockBuilder) {
     let Some(href) = attr(node, "href") else {
         // An anchor with no target is just a styled span (Teams uses them as mention wrappers).
-        walk_children(node, marks, out);
+        walk_inline(node, ctx, declared, out);
         return;
     };
+    let (add, cancel) = mark_delta(ctx.active, declared);
 
     out.inlines.push_frame();
-    walk_children(node, marks, out);
-    let mut content = out.inlines.pop_frame();
+    walk_children(node, ctx.wrapping(declared, &add), out);
+    // A link is a single node, so it cannot be split around a refusal the way a mark can: any
+    // refusal from inside the label is discharged here.
+    let mut content = flatten_segments(apply_marks(out.inlines.pop_frame(), &add));
 
     // Whitespace between the previous text and the link belongs outside the link: the clickable
     // region should not start with a space. (The normalizer deliberately does not hoist
@@ -465,17 +739,25 @@ fn walk_anchor(node: &Handle, marks: MarkSet, out: &mut BlockBuilder) {
     let leading_space = matches!(content.first(), Some(Inline::Text(t)) if t == " ");
     if leading_space {
         content.remove(0);
-        out.inlines.space_pending = true;
     }
 
-    out.inlines.push_inline(Inline::Link {
-        href,
-        title: attr(node, "title"),
-        content,
-    });
+    // Any space owed at this point is the label's own trailing whitespace, which belongs *after*
+    // the link. Hold it while the leading space is settled in front.
+    let trailing_space = out.inlines.space_pending;
+    out.inlines.space_pending = leading_space;
+    out.inlines.flush_space();
+    out.inlines.push_segments(vec![Segment {
+        cancels: cancel,
+        nodes: vec![Inline::Link {
+            href,
+            title: attr(node, "title"),
+            content,
+        }],
+    }]);
+    out.inlines.space_pending = trailing_space;
 }
 
-fn build_list(node: &Handle, tag: &str, marks: MarkSet) -> List {
+fn build_list(node: &Handle, tag: &str, ctx: Ctx) -> List {
     let ordered = tag == "ol";
     let start = attr(node, "start")
         .and_then(|s| s.trim().parse::<u64>().ok())
@@ -490,9 +772,9 @@ fn build_list(node: &Handle, tag: &str, marks: MarkSet) -> List {
         };
         match child_tag.as_str() {
             "li" => {
-                let item_marks = marks.merge(marks_for("li", attr(child, "style").as_deref()));
+                let item_ctx = ctx.distributing(marks_for("li", attr(child, "style").as_deref()));
                 let mut sub = BlockBuilder::new();
-                walk_children(child, item_marks, &mut sub);
+                walk_children(child, item_ctx, &mut sub);
                 if sub.saw_paragraph {
                     // A `<li>` whose content is wrapped in `<p>` is a loose list item; that is
                     // how CommonMark distinguishes the two and how our own renderer writes them.
@@ -506,7 +788,7 @@ fn build_list(node: &Handle, tag: &str, marks: MarkSet) -> List {
             // A list nested directly inside a list, with no `<li>` wrapper, is invalid but
             // common. Attach it to the preceding item rather than losing it.
             "ul" | "ol" => {
-                let nested = Block::List(build_list(child, &child_tag, marks));
+                let nested = Block::List(build_list(child, &child_tag, ctx));
                 match items.last_mut() {
                     Some(item) => item.blocks.push(nested),
                     None => items.push(ListItem {
@@ -529,9 +811,9 @@ fn build_list(node: &Handle, tag: &str, marks: MarkSet) -> List {
 /// Collect a subtree as a single inline run, flattening any block structure inside it.
 ///
 /// Used where the model has no room for blocks: heading content and table cells.
-fn inline_subtree(node: &Handle, marks: MarkSet) -> Vec<Inline> {
+fn inline_subtree(node: &Handle, ctx: Ctx) -> Vec<Inline> {
     let mut sub = BlockBuilder::new();
-    walk_children(node, marks, &mut sub);
+    walk_children(node, ctx, &mut sub);
     flatten_blocks(sub.finish())
 }
 
@@ -570,13 +852,13 @@ fn flatten_blocks(blocks: Vec<Block>) -> Vec<Inline> {
 
 /// The fallback content of a table: the cell text, rows separated by hard breaks and cells by a
 /// pipe, so that a pasted table still reads as a table after conversion.
-fn table_fallback(node: &Handle, marks: MarkSet) -> Vec<Inline> {
+fn table_fallback(node: &Handle, ctx: Ctx) -> Vec<Inline> {
     let mut out: Vec<Inline> = Vec::new();
     for row in descendants_named(node, &["tr"]) {
         let mut cells: Vec<Vec<Inline>> = Vec::new();
         for cell in child_elements(&row) {
             if matches!(tag_name(&cell).as_deref(), Some("td") | Some("th")) {
-                let content = inline_subtree(&cell, marks);
+                let content = inline_subtree(&cell, ctx);
                 if !content.is_empty() {
                     cells.push(content);
                 }
@@ -746,6 +1028,95 @@ mod tests {
                 Inline::Bold(vec![Inline::Text("bold".to_string())]),
                 Inline::Text("plain".to_string()),
             ]
+        );
+    }
+
+    #[test]
+    fn sibling_marks_keep_the_grouping_the_source_had() {
+        // Found by the round-trip property test. Distributing marks to the leaves would give
+        // `Italic(a), Italic(Strike(b)), Strike(c)`, which re-factors into an equivalent but
+        // differently shaped tree — and the shape is what the Markdown renderer writes out, so
+        // the round trip stopped converging. Wrapping keeps the author's grouping.
+        let got = para("<em>plain</em><s><em>plain</em>plain</s>");
+        assert_eq!(
+            got,
+            vec![
+                Inline::Italic(vec![Inline::Text("plain".to_string())]),
+                Inline::Strike(vec![
+                    Inline::Italic(vec![Inline::Text("plain".to_string())]),
+                    Inline::Text("plain".to_string()),
+                ]),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_reported_round_trip_repro_survives_intact() {
+        // `> - # *plain*~~*plain*plain~~`, the exact case from the property-test failure.
+        let html = concat!(
+            "<blockquote><ul><li><h1><em>plain</em>",
+            "<s><em>plain</em>plain</s></h1></li></ul></blockquote>"
+        );
+        let markdown = crate::markdown::render(&parse(html));
+        assert_eq!(markdown.trim_end(), "> - # *plain*~~*plain*plain~~");
+    }
+
+    #[test]
+    fn a_cancelled_mark_splits_the_run_it_sits_in() {
+        let got = para(r#"<b>a<span style="font-weight:normal">b</span>c</b>"#);
+        assert_eq!(
+            got,
+            vec![
+                Inline::bold("a"),
+                Inline::Text("b".to_string()),
+                Inline::bold("c"),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_cancellation_lifts_only_the_mark_it_names() {
+        // The italic still covers both runs; only the bold is carved out. The parser emits
+        // `Bold(Italic(x)), Italic(y)` and the normalizer then factors the shared italic out
+        // across the two runs, which is the same document either way.
+        let got = para(r#"<b><em>x<span style="font-weight:normal">y</span></em></b>"#);
+        assert_eq!(
+            got,
+            vec![Inline::Italic(vec![
+                Inline::Bold(vec![Inline::Text("x".to_string())]),
+                Inline::Text("y".to_string()),
+            ])]
+        );
+    }
+
+    #[test]
+    fn one_span_declaring_several_marks_nests_them_canonically() {
+        let got = para(r#"<span style="font-weight:600;font-style:italic">x</span>"#);
+        assert_eq!(
+            got,
+            vec![Inline::Bold(vec![Inline::Italic(vec![Inline::Text(
+                "x".to_string()
+            )])])]
+        );
+    }
+
+    #[test]
+    fn a_block_container_carrying_a_mark_still_reaches_every_run() {
+        // Nothing for the div to wrap — its children are blocks — so the mark rides down to the
+        // text runs instead, and `font-weight:normal` inside still cancels it.
+        let got = blocks(concat!(
+            r#"<div style="font-weight:600">a<em>b</em>"#,
+            r#"<span style="font-weight:normal">c</span></div>"#
+        ));
+        assert_eq!(
+            got,
+            vec![Block::Paragraph(vec![
+                Inline::Bold(vec![
+                    Inline::Text("a".to_string()),
+                    Inline::Italic(vec![Inline::Text("b".to_string())]),
+                ]),
+                Inline::Text("c".to_string()),
+            ])]
         );
     }
 

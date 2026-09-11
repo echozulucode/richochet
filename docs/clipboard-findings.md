@@ -94,10 +94,38 @@ architecture is unchanged.
 
 ### Does `raw::set_without_clear` actually preserve both formats?
 
-`ADR 0001` depends on writing HTML and a plain-text fallback in one clipboard session. This is the
-one load-bearing assumption in that ADR that has not been verified against a running Teams.
+`ADR 0001` depends on writing HTML and a plain-text fallback in one clipboard session.
 
-**Answer:**
+**Answer: yes — verified 2026-09-10**, against the built app rather than in theory. Typing
+`# Heading` / `Some **bold** and *italic* text` into Richochet and clicking **Copy for Teams**
+leaves five formats on the clipboard, including both of the ones that matter:
+
+```text
+─── CF_UNICODETEXT ─── 70 bytes
+Heading
+
+Some bold and italic text
+
+─── HTML Format ─── 251 bytes
+Version:0.9
+StartHTML:0000000105
+EndHTML:0000000251
+StartFragment:0000000141
+EndFragment:0000000215
+<html>
+<body>
+<!--StartFragment--><h1>Heading</h1><p>Some <strong>bold</strong> and <em>italic</em> text</p><!--EndFragment-->
+</body>
+</html>
+```
+
+All four CF_HTML offsets are byte-exact: the header is 105 bytes, `<html>
+<body>
+<!--StartFragment-->`
+adds 36 to reach 141, the 74-byte fragment ends at 215, and the closing 36 bytes reach 251.
+
+This says nothing about whether **Teams accepts** that HTML — only that we emit it correctly. The
+accepting half is task 1.5 below and still needs a human.
 
 ## 4. Consequences for `RenderProfile`
 

@@ -51,9 +51,10 @@ test-ui:
 test-e2e: oracle
     pnpm playwright test
 
-# Regenerate the E2E conversion oracle from the fixture corpus.
-# Playwright runs in a browser where the Rust engine is unavailable, so the mock backend replays
-# real engine output rather than reimplementing conversion in JS.
+# Playwright runs in a browser, where the Rust engine is unavailable, so the mock backend replays
+# real engine output rather than reimplementing conversion in JS. `just test-e2e` depends on this.
+
+# Regenerate the E2E conversion oracle from the fixture corpus
 oracle:
     cargo run -q -p mdcli -- export-fixtures --out src/test-support/oracle.json
 
@@ -66,8 +67,7 @@ fmt:
     cargo fmt --all
     pnpm prettier --write .
 
-# Convert on the command line (debug aid)
-# usage: just conv md2teams path/to/file.md
+# Convert on the command line, e.g. `just conv md2teams notes.md`
 conv *ARGS:
     cargo run -q -p mdcli -- {{ARGS}}
 
