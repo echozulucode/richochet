@@ -1,0 +1,106 @@
+name: Release
+
+# Triggered by pushing a tag, which is the last manual step of `just bump <version> --tag`.
+# `just bump` deliberately stops short of pushing: the tag push is what starts a release, and a
+# mistyped version should be fixable with `git tag -d` rather than by publishing something nobody
+# wanted. See docs/release-plan.md.
+on:
+  push:
+    tags: ['v*']
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write # tauri-action creates the release and uploads the installer
+
+jobs:
+  # The tag is a claim; package.json, Cargo.toml and tauri.conf.json are what the app actually
+  # reports at runtime and what names the installer. A mismatch would ship an .exe announcing a
+  # version nobody released, so it fails here — in seconds, before a runner spends ten minutes
+  # compiling — rather than after the artifact exists.
+  verify-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - uses: extractions/setup-just@v3
+
+      - name: The three version files must agree with the tag
+        run: just check-version "${GITHUB_REF_NAME#v}"
+
+  build:
+    needs: verify-version
+    # Windows is the only target: the clipboard layer is Win32 (docs/adr/0001).
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      # No `workspaces:` — this is a Cargo workspace rooted at the repo, and `mdcore` is the bulk
+      # of the compile. Pointing the cache at src-tauri/ would miss it.
+      - uses: Swatinem/rust-cache@v2
+
+      # No `version:` — the action reads `packageManager` from package.json, and refuses to start
+      # if both are set, so that the pinned version has exactly one home.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: extractions/setup-just@v3
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm playwright install --with-deps chromium
+
+      # A tag can be placed on any commit, including one CI never ran. Re-running the gate against
+      # the exact commit being shipped costs a few minutes on a rare workflow and is the difference
+      # between "main was green" and "this artifact is green". Delete these three steps if that
+      # trade stops being worth it.
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint and typecheck
+        run: just check
+
+      - name: Test
+        run: just test
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Unset until Phase 7.4 generates a key. `createUpdaterArtifacts` is off, so nothing is
+          # signed and nothing here is read; they are wired now so enabling the updater is a
+          # config change rather than a workflow change.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Richochet ${{ github.ref_name }}
+          # A draft on purpose: the generated notes want a read, and the installer wants a
+          # smoke-test on a real machine, before anyone is told to download it.
+          releaseDraft: true
+          prerelease: false
+          updaterJsonPreferNsis: true
+          releaseBody: |
+            ## Install
+
+            Download the `.exe` below and run it. It installs for the current user into
+            `%LOCALAPPDATA%\Richochet`, so there is no administrator prompt.
+
+            > **Windows SmartScreen will warn you.** The installer is not Authenticode-signed, so
+            > Windows shows "Windows protected your PC". Choose **More info → Run anyway**.
+
+            Windows only — the clipboard layer is Win32 by design.

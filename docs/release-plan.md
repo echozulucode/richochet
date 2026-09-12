@@ -200,7 +200,25 @@ the plugin into those bundles and throw on load.
 eating the request — the app opens and works, logs a warning, re-checks next launch. The `error`
 state renders no UI at all.
 
-## Phase 7.6 — GitHub Actions
+## Phase 7.6 — GitHub Actions (LANDED 2026-09-12)
+
+Both workflows exist: `.github/workflows/release.yml` and `.github/workflows/release-dry-run.yml`.
+Built to the spec below, with three deviations, all deliberate:
+
+- **`release.yml` re-runs the full gate** (`fmt --check`, `just check`, `just test`) before
+  building. The spec did not call for it. A tag can be placed on any commit, including one CI never
+  ran, so this is the difference between "main was green" and "this artifact is green". It costs a
+  few minutes on a rare workflow; the three steps are commented so they are easy to drop.
+- **No `workspaces:` on `Swatinem/rust-cache`.** The spec wondered whether caching the workspace
+  root beats caching `src-tauri/`. It does: this is a Cargo workspace rooted at the repo and
+  `mdcore` is the bulk of the compile, so pointing the cache at `src-tauri/` would miss it.
+- **`verify-version` runs on `ubuntu-latest`**, not Windows. It only needs Node and `just`, and
+  failing in seconds beats failing after a Windows runner has spun up.
+
+`release-dry-run.yml` takes a `run-tests` input (default true) so it can be used either as a full
+rehearsal or as a quick "does it still bundle" check.
+
+### The original spec
 
 `ci.yml` stays as it is (windows-latest, `just check` + `just test`). Two new workflows:
 

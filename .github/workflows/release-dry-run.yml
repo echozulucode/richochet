@@ -1,0 +1,72 @@
+name: Release dry run
+
+# The same build as release.yml with no tag, no secrets and no release step, uploading the
+# installer as a workflow artifact instead.
+#
+# This exists so the first `v0.1.0` tag is not also the first execution of a never-run workflow.
+# Dispatch it, download the artifact, install it on a real machine, *then* tag. See
+# docs/release-plan.md §7.6.
+on:
+  workflow_dispatch:
+    inputs:
+      run-tests:
+        description: 'Run the full gate as well as building'
+        type: boolean
+        default: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read # no release is created, so nothing needs write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - uses: extractions/setup-just@v3
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        if: inputs.run-tests
+        run: pnpm playwright install --with-deps chromium
+
+      - name: Check formatting
+        if: inputs.run-tests
+        run: cargo fmt --all -- --check
+
+      - name: Lint and typecheck
+        if: inputs.run-tests
+        run: just check
+
+      - name: Test
+        if: inputs.run-tests
+        run: just test
+
+      - name: Build the installer
+        run: just build
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: richochet-installer
+          path: target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          retention-days: 14
