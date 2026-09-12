@@ -3,5 +3,11 @@
   "identifier": "default",
   "description": "Permissions for the main Richochet window.",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default", "store:default"]
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "store:default",
+    "updater:default",
+    "process:allow-restart"
+  ]
 }

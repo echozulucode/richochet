@@ -17,9 +17,18 @@ dev:
 dev-web:
     pnpm vite dev
 
-# Build the release bundle
+# The bundler signs the installer for the auto-updater, so it needs the private key. Without this
+# check it compiles for minutes, writes a complete-looking installer, and only then fails — leaving
+# an .exe with no .sig that can never be offered as an update. Checking first fails in a second.
+
+# Build the signed release installer (needs TAURI_SIGNING_PRIVATE_KEY; see README)
 build:
+    @if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { Write-Host 'TAURI_SIGNING_PRIVATE_KEY is not set, so the installer cannot be signed for the auto-updater.' -ForegroundColor Red; Write-Host 'Set it (see README > Build it yourself), or run `just build-unsigned` for a local test build.' -ForegroundColor Red; exit 1 }
     pnpm tauri build
+
+# Build an installer WITHOUT updater signing — for local testing only, never for a release
+build-unsigned:
+    pnpm tauri build --config src-tauri/tauri.unsigned.conf.json
 
 # Bump the version in all three files that carry it, e.g. `just bump patch --tag`
 bump *ARGS:

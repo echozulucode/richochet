@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { CopyButton } from './components/CopyButton/CopyButton';
 import { MarkdownEditor } from './components/MarkdownEditor/MarkdownEditor';
@@ -8,6 +8,7 @@ import { StatusToast } from './components/StatusToast/StatusToast';
 import { TitleBar } from './components/TitleBar/TitleBar';
 import { getBackend } from './lib/converter';
 import { useMediaQuery } from './lib/useMediaQuery';
+import { updateStore } from './stores/updateStore';
 
 /** Below this width there is not enough room for two panes side by side. */
 const NARROW_QUERY = '(max-width: 699px)';
@@ -72,6 +73,13 @@ export function App(): React.JSX.Element {
   const backend = useMemo(() => getBackend().name, []);
   const narrow = useMediaQuery(NARROW_QUERY);
   const [visible, setVisible] = useState<PaneKey>('formatted');
+
+  // The launch update check. After paint, never awaited, guarded inside the store so StrictMode's
+  // double mount and any later re-render still only produce one request; a failure - no network,
+  // no Tauri at all under ?backend=mock - resolves quietly rather than throwing into render.
+  useEffect(() => {
+    void updateStore.getState().checkOnLaunch();
+  }, []);
 
   const formatted = (
     <Pane

@@ -25,6 +25,12 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-store = "2"
 
+# Auto-update. The updater plugin pings the manifest URL in tauri.conf.json
+# (plugins.updater.endpoints) and refuses anything not signed by the matching private key. The
+# process plugin is its partner: it provides the relaunch that completes a Windows install.
+tauri-plugin-updater = "2.11"
+tauri-plugin-process = "2.3"
+
 [target.'cfg(windows)'.dependencies]
 clipboard-win = "5.4"
 

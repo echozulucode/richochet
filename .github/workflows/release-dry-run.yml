@@ -60,13 +60,23 @@ jobs:
         if: inputs.run-tests
         run: just test
 
+      # `createUpdaterArtifacts: true` means the bundler signs the installer, so the build now
+      # needs the key even here. Passing it makes the dry run a real rehearsal: if the secret is
+      # missing or the passphrase is wrong, this is where you find out — not on a tag.
       - name: Build the installer
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: just build
 
       - name: Upload the installer
         uses: actions/upload-artifact@v4
         with:
           name: richochet-installer
-          path: target/release/bundle/nsis/*-setup.exe
+          # The `.sig` too: it is the half the updater actually verifies, and its absence is the
+          # symptom of signing having silently not happened.
+          path: |
+            target/release/bundle/nsis/*-setup.exe
+            target/release/bundle/nsis/*-setup.exe.sig
           if-no-files-found: error
           retention-days: 14

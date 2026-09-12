@@ -41,6 +41,21 @@ just build    # release installer
 `just` with no arguments lists every recipe. It is the only entry point — there is no raw
 `cargo`/`pnpm` incantation you are expected to remember.
 
+`just build` signs the installer for the auto-updater, so it needs the private signing key. It checks
+for it before doing anything and stops immediately if it is missing:
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY = "$HOME\.tauri\richochet-updater.key"   # a path is accepted
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = "<passphrase>"
+just build
+```
+
+No key? `just build-unsigned` builds a working installer without updater signing. It installs and
+runs normally, but it has no `.sig`, so it can never be offered as an update — use it to test a
+build locally, never to publish one.
+
+`just dev`, `just test` and `just ci` need none of this — only bundling signs.
+
 ## How it's put together
 
 ```text

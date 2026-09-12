@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { useThemeStore } from '../../stores/themeStore';
 import type { ThemePreference } from '../../stores/themeStore';
+import { hasPendingUpdate, updateStore, useUpdateStore } from '../../stores/updateStore';
 
 const OPTIONS: ReadonlyArray<{ value: ThemePreference; label: string }> = [
   { value: 'system', label: 'System' },
@@ -9,10 +10,64 @@ const OPTIONS: ReadonlyArray<{ value: ThemePreference; label: string }> = [
   { value: 'dark', label: 'Dark' },
 ];
 
+/**
+ * The Updates group.
+ *
+ * Four of the seven states - including `error` - are the same quiet line: the product name and,
+ * when we can read it, the running version. An update check that failed looks exactly like one
+ * that found nothing, which is the point: offline is not a condition the user has to act on.
+ */
+function UpdatesGroup(): React.JSX.Element {
+  const state = useUpdateStore((store) => store.state);
+  const currentVersion = useUpdateStore((store) => store.currentVersion);
+
+  const line = (children: React.ReactNode) => (
+    <p
+      data-testid="update-status"
+      data-update-state={state.kind}
+      className="px-2 py-1 text-[13px] text-muted select-none"
+    >
+      {children}
+    </p>
+  );
+
+  const action = (label: string, onClick: () => void) => (
+    <button
+      type="button"
+      role="menuitem"
+      data-testid="update-status"
+      data-update-state={state.kind}
+      onClick={onClick}
+      className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-[13px] text-ink hover:bg-line/70"
+    >
+      <span aria-hidden="true" className="text-accent">
+        &#9656;
+      </span>
+      {label}
+    </button>
+  );
+
+  switch (state.kind) {
+    case 'available':
+      return action(`${state.version} available`, () => {
+        void updateStore.getState().startDownload();
+      });
+    case 'downloading':
+      return line(state.percent === null ? 'Downloading…' : `Downloading… ${state.percent}%`);
+    case 'ready-to-install':
+      return action('Restart to update', () => {
+        void updateStore.getState().restart();
+      });
+    default:
+      return line(currentVersion === null ? 'Richochet' : `Richochet ${currentVersion}`);
+  }
+}
+
 /** The slim title row: the product name, and one quiet settings affordance. */
 export function TitleBar(): React.JSX.Element {
   const preference = useThemeStore((state) => state.preference);
   const setPreference = useThemeStore((state) => state.setPreference);
+  const pending = useUpdateStore((store) => hasPendingUpdate(store.state));
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement | null>(null);
 
@@ -44,13 +99,21 @@ export function TitleBar(): React.JSX.Element {
           data-testid="theme-toggle"
           aria-haspopup="menu"
           aria-expanded={open}
-          aria-label="Settings"
-          title="Settings"
+          aria-label={pending ? 'Settings — update available' : 'Settings'}
+          title={pending ? 'Settings — update available' : 'Settings'}
           onClick={() => {
             setOpen((value) => !value);
           }}
-          className="flex size-7 items-center justify-center rounded-md text-muted transition-colors duration-150 hover:bg-line/70 hover:text-ink"
+          className="relative flex size-7 items-center justify-center rounded-md text-muted transition-colors duration-150 hover:bg-line/70 hover:text-ink"
         >
+          {/* The whole update feature's claim on the user's attention: one 6px dot. */}
+          {pending ? (
+            <span
+              aria-hidden="true"
+              data-testid="update-dot"
+              className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-accent"
+            />
+          ) : null}
           <svg viewBox="0 0 16 16" aria-hidden="true" className="size-4">
             <path
               fill="currentColor"
@@ -68,7 +131,7 @@ export function TitleBar(): React.JSX.Element {
           <div
             role="menu"
             data-testid="settings-menu"
-            className="absolute right-0 z-10 mt-1 w-36 rounded-lg border border-line bg-surface p-1 shadow-[var(--shadow-pop)]"
+            className="absolute right-0 z-10 mt-1 w-44 rounded-lg border border-line bg-surface p-1 shadow-[var(--shadow-pop)]"
           >
             <p className="px-2 py-1 text-[11px] tracking-wide text-muted uppercase">Appearance</p>
             {OPTIONS.map((option) => (
@@ -92,6 +155,13 @@ export function TitleBar(): React.JSX.Element {
                 ) : null}
               </button>
             ))}
+
+            <hr className="my-1 border-0 border-t border-line" />
+
+            <div data-testid="updates-group">
+              <p className="px-2 py-1 text-[11px] tracking-wide text-muted uppercase">Updates</p>
+              <UpdatesGroup />
+            </div>
           </div>
         ) : null}
       </div>
