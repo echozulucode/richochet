@@ -12,6 +12,13 @@ Teams supports a Markdown-_style_ syntax that Microsoft explicitly documents as 
 Markdown, so Richochet doesn't try to translate one syntax into the other. Everything normalizes
 into a small document model, and Markdown, HTML and plain text are each generated from that.
 
+<p align="center">
+  <img src="screenshots/screenshot-001.png" alt="Richochet in dark mode: a Markdown document on the right, its rendered form on the left" width="49%">
+  <img src="screenshots/screenshot-002.png" alt="The same document in light mode" width="49%">
+</p>
+
+<p align="center"><sub>Two panes over one document. Edit either side; the other follows.</sub></p>
+
 ## Install
 
 Grab the installer from [Releases](https://github.com/echozulucode/richochet/releases/latest) —

@@ -59,6 +59,15 @@ test-ui:
 test-e2e: oracle
     pnpm playwright test
 
+# Source art must be a square PNG with transparency, 1024x1024 or larger. It is kept in the repo
+# as src-tauri/icons/source.png so the set can always be regenerated from the original.
+
+# Regenerate every app icon from the source art
+icon FILE="src-tauri/icons/source.png":
+    pnpm tauri icon {{FILE}}
+    @pwsh -NoProfile -Command "Remove-Item -Recurse -Force src-tauri/icons/android, src-tauri/icons/ios -ErrorAction SilentlyContinue"
+    @echo "Regenerated src-tauri/icons. Mobile icon sets removed - Richochet is a desktop app."
+
 # Playwright runs in a browser, where the Rust engine is unavailable, so the mock backend replays
 # real engine output rather than reimplementing conversion in JS. `just test-e2e` depends on this.
 

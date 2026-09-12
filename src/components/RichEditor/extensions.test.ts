@@ -65,4 +65,20 @@ describe('rich editor schema', () => {
     expect(editor.state.doc.childCount).toBe(7);
     editor.destroy();
   });
+
+  it('does not invent a link title', () => {
+    // A title the user never wrote round-trips back out as `[text](url "title")`, which rewrites
+    // their Markdown the moment they click into the Formatted pane.
+    const editor = editorWith('<p><a href="https://openai.com">OpenAI</a></p>');
+    const html = editor.getHTML();
+    expect(html).toContain('href="https://openai.com"');
+    expect(html).not.toContain('title=');
+    editor.destroy();
+  });
+
+  it('keeps a link title the author did write', () => {
+    const editor = editorWith('<p><a href="https://openai.com" title="Docs">OpenAI</a></p>');
+    expect(editor.getHTML()).toContain('title="Docs"');
+    editor.destroy();
+  });
 });
