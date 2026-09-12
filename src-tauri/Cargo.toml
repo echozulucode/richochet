@@ -1,10 +1,13 @@
 [package]
 name = "app"
-description = "Richochet"
+description = "Richochet desktop shell: the window, the IPC surface and the Win32 clipboard."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [lib]
 name = "app_lib"

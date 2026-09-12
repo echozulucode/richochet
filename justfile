@@ -21,6 +21,14 @@ dev-web:
 build:
     pnpm tauri build
 
+# Bump the version in all three files that carry it, e.g. `just bump patch --tag`
+bump *ARGS:
+    node tools/bump-version.mjs {{ARGS}}
+
+# Verify all three version files agree with a version or tag — what the release workflow checks
+check-version VERSION:
+    node tools/bump-version.mjs --check {{VERSION}}
+
 # Everything CI runs
 ci: check test
 

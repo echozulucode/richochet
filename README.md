@@ -1,7 +1,10 @@
 # Richochet
 
+[![CI](https://github.com/echozulucode/richochet/actions/workflows/ci.yml/badge.svg)](https://github.com/echozulucode/richochet/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Paste rich text from Microsoft Teams, get clean Markdown. Write Markdown, copy it back into Teams
-with the formatting intact.
+with the formatting intact. **Windows only** — the clipboard layer is Win32 by design.
 
 _"rich text" + "ricochet"_ — content bouncing between formats. The `h` is deliberate.
 
@@ -9,7 +12,17 @@ Teams supports a Markdown-_style_ syntax that Microsoft explicitly documents as 
 Markdown, so Richochet doesn't try to translate one syntax into the other. Everything normalizes
 into a small document model, and Markdown, HTML and plain text are each generated from that.
 
-## Quick start
+## Install
+
+Grab the installer from [Releases](https://github.com/echozulucode/richochet/releases/latest) —
+`Richochet_<version>_x64-setup.exe`. It installs per-user into
+`%LOCALAPPDATA%\Richochet`, so there is no admin prompt.
+
+On first run, Windows SmartScreen will warn about an unrecognized publisher: click **More info** →
+**Run anyway**. The installer isn't Authenticode-signed — a certificate costs real money per year,
+and for a 0.x release that tradeoff isn't worth it yet.
+
+## Build it yourself
 
 ```sh
 just setup    # install dependencies (once)
@@ -47,6 +60,7 @@ renderer, so tuning fidelity means editing a struct literal and adding a fixture
 | `docs/plan.md`                | Design rationale — why the architecture is shaped this way |
 | `docs/implementation-plan.md` | The phased build order, task tables, exit criteria         |
 | `docs/clipboard-findings.md`  | What Teams actually puts on the clipboard (Phase 1)        |
+| `docs/release-plan.md`        | Installers, GitHub Actions, auto-updates, code signing     |
 | `docs/adr/`                   | Decisions that would be expensive to reverse               |
 | `AGENTS.md`                   | Working agreement for agents and contributors              |
 

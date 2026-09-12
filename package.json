@@ -4,6 +4,17 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Richochet — Teams rich text and Markdown, bouncing between formats.",
+  "license": "MIT",
+  "author": "Eric Zimmerman",
+  "homepage": "https://github.com/echozulucode/richochet",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/echozulucode/richochet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/echozulucode/richochet/issues"
+  },
+  "packageManager": "pnpm@10.34.1",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p tsconfig.json && vite build",
