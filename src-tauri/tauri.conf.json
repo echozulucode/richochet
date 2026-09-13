@@ -31,7 +31,7 @@
       "endpoints": [
         "https://github.com/echozulucode/richochet/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQyM0JBQzA2MTYwQzk5RjIKUldUeW1Rd1dCcXc3UXIrLzI2VWdwSWRTd1YvZ2ZEUHF6MkxqV290SXI5Z3FQQ3BDbFQzeWJDckoK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg3QzFFNEIyRTNFQzc2QTMKUldTamR1empzdVRCaHgzVjc1TFVZOG43K2JrSnFhaXIxbHJPZVp5UUltWFJ4Um9Yc0Fid05sMTMK",
       "windows": {
         "installMode": "passive"
       }
