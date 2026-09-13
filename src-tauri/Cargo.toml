@@ -33,6 +33,14 @@ tauri-plugin-process = "2.3"
 
 [target.'cfg(windows)'.dependencies]
 clipboard-win = "5.4"
+# Only to name the process holding the clipboard when it will not open (clipboard/open.rs).
+# Already in the tree through Tauri, so this adds no new crate.
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_System_DataExchange",
+  "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
+] }
 
 [target.'cfg(not(windows))'.dependencies]
 arboard = "3.6"

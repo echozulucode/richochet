@@ -104,14 +104,36 @@ pub fn outline(markdown: String) -> Result<OutlinePayload, CommandError> {
 }
 
 /// Read every representation the clipboard offers and return the richest ones.
+///
+/// `async`, with the work on a blocking thread, for a reason that is easy to undo by accident: a
+/// non-async Tauri command runs inline on the thread that handles IPC, which on desktop is the main
+/// thread. Opening the clipboard can now wait up to half a second for another application to let go
+/// (see `clipboard/open.rs`), and doing that on the main thread would freeze the whole window.
 #[tauri::command]
-pub fn read_clipboard() -> Result<ClipboardPayload, CommandError> {
-    Ok(clipboard::read()?)
+pub async fn read_clipboard() -> Result<ClipboardPayload, CommandError> {
+    let payload = tauri::async_runtime::spawn_blocking(clipboard::read)
+        .await
+        .map_err(|error| worker_failed("read", error))??;
+    Ok(payload)
 }
 
 /// Write HTML and a plain-text fallback to the clipboard in a single atomic operation.
+///
+/// Off the main thread for the same reason as [`read_clipboard`].
 #[tauri::command]
-pub fn write_clipboard(payload: OutboundPayload) -> Result<(), CommandError> {
-    clipboard::write(payload.html.as_deref(), &payload.text)?;
+pub async fn write_clipboard(payload: OutboundPayload) -> Result<(), CommandError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        clipboard::write(payload.html.as_deref(), &payload.text)
+    })
+    .await
+    .map_err(|error| worker_failed("write", error))??;
     Ok(())
+}
+
+/// The blocking worker itself failed (it panicked or was cancelled) rather than the clipboard.
+fn worker_failed(op: &'static str, error: tauri::Error) -> ClipError {
+    ClipError::Io {
+        op,
+        detail: format!("clipboard worker failed: {error}"),
+    }
 }

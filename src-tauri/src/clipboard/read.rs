@@ -8,14 +8,6 @@
 use super::ClipError;
 use crate::commands::ClipboardPayload;
 
-/// How many extra times to retry `OpenClipboard` before giving up.
-///
-/// Explorer, Office and clipboard-history utilities all grab the clipboard for a few milliseconds
-/// after a copy. `clipboard-win` yields the scheduler between attempts, so this costs nothing when
-/// the clipboard is free.
-#[cfg(windows)]
-const OPEN_ATTEMPTS: usize = 10;
-
 /// The registered clipboard format name RTF lives under.
 #[cfg(windows)]
 const RTF_FORMAT_NAME: &str = "Rich Text Format";
@@ -29,17 +21,14 @@ const RTF_FORMAT_NAME: &str = "Rich Text Format";
 ///
 /// # Errors
 ///
-/// Returns [`ClipError::Open`] when the clipboard could not be opened after [`OPEN_ATTEMPTS`]
-/// retries, and [`ClipError::Io`] when the clipboard was open but held neither text nor HTML. A
+/// Returns [`ClipError::Busy`] when another application kept the clipboard locked through the whole
+/// retry window, and [`ClipError::Io`] when the clipboard was open but held neither text nor HTML. A
 /// format that is present but unreadable fails with [`ClipError::Io`] rather than being silently
 /// dropped; a format that is simply absent is not an error.
 #[cfg(windows)]
 pub fn read() -> Result<ClipboardPayload, ClipError> {
-    use clipboard_win::Clipboard;
-
     // Held for the rest of the function; dropping it closes the clipboard.
-    let _guard =
-        Clipboard::new_attempts(OPEN_ATTEMPTS).map_err(|e| ClipError::Open(err_text(&e)))?;
+    let _session = super::open::open()?;
 
     let html = read_html()?;
     let rtf = read_rtf()?;

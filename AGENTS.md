@@ -87,6 +87,18 @@ dependency**; `src-tauri` is a thin shell that owns the clipboard and the comman
 4. **Markdown escaping.** Escape contextually, and prefer over-escaping when unsure — it is ugly but
    correct; under-escaping is silently wrong.
 5. **Clipboard HTML is untrusted input** from another process. Run `ammonia` before parsing.
+6. **Opening the clipboard must wait for real.** Clipboard history, the app you copied from, RDP and
+   clipboard managers all hold it for milliseconds after a copy, and `OpenClipboard` fails with
+   `ERROR_ACCESS_DENIED` meanwhile. `clipboard_win::Clipboard::new_attempts` retries with `Sleep(0)`,
+   which finishes in under a millisecond and absorbs nothing — it failed 80% of the time against a
+   40ms-in-50ms hold, no better than no retry. Always open through `clipboard::open::open()`, which
+   backs off for about half a second and names the holder on failure.
+7. **Clipboard commands must stay `async`.** A non-async Tauri command runs inline on the IPC thread,
+   which on desktop is the main thread. The clipboard open can now wait up to half a second, so a
+   synchronous clipboard command would freeze the window while it does.
+8. **Reproducing clipboard contention needs a real window handle.** A test process that calls
+   `OpenClipboard(NULL)` does not block other processes, so a harness built that way shows the
+   retry "working" when it has not been tested at all. Hold it with an `HWND`, as real apps do.
 
 ## Test architecture
 

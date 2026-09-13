@@ -11,10 +11,6 @@
 
 use super::ClipError;
 
-/// How many extra times to retry `OpenClipboard` before giving up. See [`super::read`].
-#[cfg(windows)]
-const OPEN_ATTEMPTS: usize = 10;
-
 /// Place `html` (when given) and `text` on the clipboard in one open/close cycle.
 ///
 /// `text` is always written as `CF_UNICODETEXT`. When `html` is `Some`, it is additionally written
@@ -23,16 +19,15 @@ const OPEN_ATTEMPTS: usize = 10;
 ///
 /// # Errors
 ///
-/// [`ClipError::Open`] when the clipboard could not be opened after [`OPEN_ATTEMPTS`] retries, and
+/// [`ClipError::Busy`] when another application kept the clipboard locked through the whole retries, and
 /// [`ClipError::Io`] when a write failed. A failed HTML write leaves the plain-text representation
 /// in place, because the text is written first: a degraded paste beats an empty one.
 #[cfg(windows)]
 pub fn write(html: Option<&str>, text: &str) -> Result<(), ClipError> {
-    use clipboard_win::{formats, options::NoClear, raw, Clipboard};
+    use clipboard_win::{formats, options::NoClear, raw};
 
     // Held for the rest of the function; dropping it closes the clipboard.
-    let _guard =
-        Clipboard::new_attempts(OPEN_ATTEMPTS).map_err(|e| ClipError::Open(err_text(&e)))?;
+    let _session = super::open::open()?;
 
     // Exactly once, up front. `EmptyClipboard` also transfers ownership to us, which is what makes
     // the subsequent `SetClipboardData` calls legal.
