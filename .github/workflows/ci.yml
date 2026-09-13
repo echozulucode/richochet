@@ -13,7 +13,7 @@ jobs:
     # Windows is the primary target: the clipboard layer is Win32 (see docs/adr/0001).
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -23,14 +23,14 @@ jobs:
 
       # No `version:` — the action reads `packageManager` from package.json, and refuses to start
       # if both are set, so that the pinned version has exactly one home.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
 
-      - uses: extractions/setup-just@v3
+      - uses: extractions/setup-just@v4
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -49,7 +49,7 @@ jobs:
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-report
           path: playwright-report/
